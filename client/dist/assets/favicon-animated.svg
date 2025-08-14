@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .book-page {
+        animation: page-turn 3s ease-in-out infinite;
+        transform-origin: center;
+      }
+      .grad-cap {
+        animation: float 2s ease-in-out infinite;
+      }
+    }
+    @keyframes page-turn {
+      0%, 100% { transform: scaleX(1); }
+      50% { transform: scaleX(0.95); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-1px); }
+    }
+  </style>
+  
+  <!-- Background with subtle pulse -->
+  <rect width="32" height="32" rx="6" fill="#4338ca">
+    <animate 
+      attributeName="fill"
+      values="#4338ca;#4f46e5;#4338ca"
+      dur="4s"
+      repeatCount="indefinite"
+    />
+  </rect>
+  
+  <!-- Animated Book -->
+  <g class="book-page">
+    <path d="M8 10 L8 22 L24 22 L24 10 L8 10" fill="#f3f4f6" />
+    <path d="M8 10 L16 14 L24 10" fill="#e5e7eb" />
+    <path d="M16 14 L16 22" stroke="#d1d5db" strokeWidth="1"/>
+  </g>
+  
+  <!-- Floating Graduation Cap -->
+  <g class="grad-cap">
+    <path d="M10 8 L16 6 L22 8 L16 10 Z" fill="#fbbf24"/>
+    <path d="M16 10 L16 12" stroke="#fbbf24" strokeWidth="1.5"/>
+    <circle cx="16" cy="12" r="1" fill="#fbbf24"/>
+  </g>
+</svg>

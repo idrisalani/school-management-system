@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="theme-color" content="#4338ca" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e1b4b" media="(prefers-color-scheme: dark)" />
+    
+    <!-- Primary Meta Tags -->
+    <title>EduManager - Complete School Management System</title>
+    <meta name="title" content="EduManager - Complete School Management System" />
+    <meta name="description" content="Streamline your school's operations with our comprehensive management system. Features include attendance tracking, grade management, and parent communication." />
+    <meta name="keywords" content="school management system, education software, student management, school administration, attendance tracking" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="revisit-after" content="7 days" />
+    <meta name="author" content="EduManager" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://edumanager.com/" />
+    <meta property="og:title" content="EduManager - Complete School Management System" />
+    <meta property="og:description" content="Streamline your school's operations with our comprehensive management system." />
+    <meta property="og:image" content="%PUBLIC_URL%/assets/og-image.png" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="EduManager" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://edumanager.com/" />
+    <meta property="twitter:title" content="EduManager - School Management System" />
+    <meta property="twitter:description" content="Streamline your school's operations with our comprehensive management system." />
+    <meta property="twitter:image" content="%PUBLIC_URL%/assets/twitter-card.png" />
+
+    <!-- Mobile App Meta -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EduManager" />
+    
+    <!-- Preconnect to Essential Third-party Services -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/assets/favicon.svg" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/assets/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
+    <link rel="alternate icon" type="image/png" href="%PUBLIC_URL%/assets/favicon.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/assets/apple-touch-icon.svg" />
+    <link rel="mask-icon" href="%PUBLIC_URL%/assets/safari-pinned-tab.svg" color="#4338ca" />
+    
+    <!-- PWA -->
+    <!-- Icons and Manifest -->
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Fonts -->
+    <link 
+      rel="preload" 
+      href="%PUBLIC_URL%/assets/fonts/inter-var.woff2" 
+      as="font" 
+      type="font/woff2" 
+      crossorigin
+    />
+
+
+    <!-- App loading styles -->
+    <style>
+      :root {
+        --primary-color: #4338ca;
+        --background-color: #f3f4f6;
+        --border-color: #e5e7eb;
+        --text-color: #1f2937;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --primary-color: #4f46e5;
+          --background-color: #1e1b4b;
+          --border-color: #4f46e5;
+          --text-color: #f3f4f6;
+        }
+      }
+
+      .app-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: var(--background-color);
+        transition: all 0.3s ease;
+        gap: 1.5rem;
+      }
+
+      .app-loading__logo {
+        width: 64px;
+        height: 64px;
+        opacity: 0;
+        color: var(--primary-color);
+        animation: fadeInLogo 0.5s ease forwards;
+      }
+
+      .app-loading__title {
+        font-size: 1.5rem;
+        color: var(--text-color);
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        opacity: 0;
+        animation: fadeInTitle 0.5s ease 0.3s forwards;
+      }
+      
+      .app-loading__spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--border-color);
+        border-radius: 50%;
+        border-top-color: var(--primary-color);
+        opacity: 0;
+        animation: 
+          fadeInSpinner 0.5s ease 0.6s forwards,
+          spin 1s linear infinite 0.6s;
+      }
+
+      .app-loading__text {
+        color: var(--text-color);
+        font-size: 0.875rem;
+        opacity: 0;
+        animation: fadeInText 0.5s ease 0.9s forwards;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @keyframes fadeInLogo {
+        from { 
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to { 
+          opacity: 0.9;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeInTitle {
+        from { 
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+        to { 
+          opacity: 0.9;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeInSpinner {
+        from { 
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to { 
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes fadeInText {
+        from { 
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        to { 
+          opacity: 0.7;
+          transform: translateY(0);
+        }
+      }
+    </style>
+
+    <!-- Update font loading script to add 'fonts-ready' class -->
+    <script>
+      (function() {
+        document.documentElement.classList.add('fonts-loading');
+        if ("fonts" in document) {
+          Promise.all([
+            document.fonts.load("1em Inter")
+          ]).then(() => {
+            document.documentElement.classList.remove('fonts-loading');
+            document.documentElement.classList.add('fonts-ready');
+          });
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root">
+      <div class="app-loading">
+        <!-- Add a logo SVG -->
+        <svg class="app-loading__logo" viewBox="0 0 24 24">
+          <path 
+            fill="currentColor"
+            d="M12 3L1 9l11 6l11-6l-11-6zM1 9v6l11 6l11-6V9l-11 6l-11-6z"
+          />
+        </svg>
+        <div class="app-loading__title">EduManager</div>
+        <div class="app-loading__spinner"></div>
+        <div class="app-loading__text">Loading your dashboard...</div>
+      </div>
+    </div>
+
+    <!-- React application script -->
+    <script type="module" src="/src/index.js"></script>
+  </body>
+</html>

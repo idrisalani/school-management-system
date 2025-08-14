@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <!-- Background with gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4338ca" />
+      <stop offset="100%" style="stop-color:#3730a3" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main background -->
+  <rect width="1200" height="630" fill="url(#bg-gradient)" />
+  
+  <!-- Decorative circles -->
+  <circle cx="200" cy="100" r="300" fill="#4f46e5" opacity="0.1" />
+  <circle cx="1000" cy="500" r="250" fill="#4f46e5" opacity="0.1" />
+  
+  <!-- Large icon -->
+  <g transform="translate(300, 165) scale(5)">
+    <!-- Book -->
+    <path d="M8 10 L8 22 L24 22 L24 10 L8 10" fill="#f3f4f6" />
+    <path d="M8 10 L16 14 L24 10" fill="#e5e7eb" />
+    <path d="M16 14 L16 22" stroke="#d1d5db" strokeWidth="1"/>
+    
+    <!-- Graduation Cap -->
+    <path d="M10 8 L16 6 L22 8 L16 10 Z" fill="#fbbf24"/>
+    <path d="M16 10 L16 12" stroke="#fbbf24" strokeWidth="1.5"/>
+    <circle cx="16" cy="12" r="1" fill="#fbbf24"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="600" y="450" 
+    font-family="system-ui, -apple-system, sans-serif" 
+    font-size="72" 
+    font-weight="bold" 
+    fill="white" 
+    text-anchor="middle">
+    School Management System
+  </text>
+  <text x="600" y="500" 
+    font-family="system-ui, -apple-system, sans-serif" 
+    font-size="32" 
+    fill="#e5e7eb" 
+    text-anchor="middle">
+    Streamline Your Educational Institution
+  </text>
+</svg>

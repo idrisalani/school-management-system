@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <!-- Background -->
+  <rect width="180" height="180" rx="40" fill="#4338ca"/>
+  
+  <!-- Book -->
+  <path d="M45 56 L45 124 L135 124 L135 56 L45 56" fill="#f3f4f6" />
+  <path d="M45 56 L90 79 L135 56" fill="#e5e7eb" />
+  <path d="M90 79 L90 124" stroke="#d1d5db" strokeWidth="4"/>
+  
+  <!-- Graduation Cap -->
+  <path d="M56 45 L90 34 L124 45 L90 56 Z" fill="#fbbf24"/>
+  <path d="M90 56 L90 67" stroke="#fbbf24" strokeWidth="6"/>
+  <circle cx="90" cy="67" r="5" fill="#fbbf24"/>
+</svg>

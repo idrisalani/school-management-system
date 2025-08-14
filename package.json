@@ -1,0 +1,12 @@
+{
+  "name": "school-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm ci && npm run build",
+    "dev": "cd client && npm start",
+    "start": "cd client && npm start"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

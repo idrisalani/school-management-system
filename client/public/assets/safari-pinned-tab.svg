@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="black">
+  <!-- Safari requires monochrome black design -->
+  <path d="M3 4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z" />
+  <path d="M8 2.5L4 4v1l4 1.5L12 4V3L8 2.5z" />
+  <path fillRule="evenodd" d="M8 7v4" strokeWidth="0.5" />
+  <circle cx="8" cy="11" r="0.5" />
+</svg>
