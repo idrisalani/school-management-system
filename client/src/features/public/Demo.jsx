@@ -10,6 +10,8 @@ import {
   ClipboardList,
   Bell,
   BarChart3,
+  GraduationCap,
+  ArrowLeft,
 } from "lucide-react";
 
 const DemoFeatures = [
@@ -51,6 +53,35 @@ const DemoFeatures = [
 const Demo = () => {
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <Link to="/" className="flex items-center">
+              <GraduationCap className="h-8 w-8 text-indigo-600" />
+              <span className="ml-2 text-xl font-bold text-gray-900">
+                EduManager
+              </span>
+            </Link>
+            <div className="flex items-center space-x-4">
+              <Link
+                to="/"
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Home
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Start Free Trial
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
@@ -65,27 +96,40 @@ const Demo = () => {
           {DemoFeatures.map((feature, index) => (
             <div
               key={index}
-              className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="text-indigo-600 mb-4">{feature.icon}</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 {feature.title}
               </h3>
-              <p className="text-gray-600">{feature.description}</p>
+              <p className="text-gray-600 mb-4">{feature.description}</p>
+              <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
+                Try Now →
+              </button>
             </div>
           ))}
         </div>
 
         <div className="mt-12 text-center">
-          <Link
-            to="/register"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-          >
-            Start Free Trial
-          </Link>
-          <p className="mt-2 text-sm text-gray-500">
-            No credit card required. 14-day free trial available.
-          </p>
+          <div className="space-y-4">
+            <Link
+              to="/register"
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+            >
+              Start Free Trial
+            </Link>
+            <p className="text-sm text-gray-500">
+              No credit card required. 14-day free trial available.
+            </p>
+            <div className="mt-6">
+              <Link
+                to="/"
+                className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+              >
+                ← Return to Homepage
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </div>

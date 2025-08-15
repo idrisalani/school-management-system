@@ -3,7 +3,14 @@
 // src/features/public/Contact.jsx
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Phone, MapPin, GraduationCap, Loader } from "lucide-react";
+import {
+  Mail,
+  Phone,
+  MapPin,
+  GraduationCap,
+  Loader,
+  ArrowLeft,
+} from "lucide-react";
 
 const ContactInfo = [
   {
@@ -68,6 +75,15 @@ const Contact = () => {
                 EduManager
               </span>
             </Link>
+            <div className="flex items-center space-x-4">
+              <Link
+                to="/"
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Home
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
