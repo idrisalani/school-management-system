@@ -133,6 +133,7 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState(null);
 
   /** @type {[FormData, React.Dispatch<React.SetStateAction<FormData>>]} */
   const [formData, setFormData] = useState(initialFormData);
@@ -172,6 +173,32 @@ const Register = () => {
       );
     }
   }, [formData.firstName, formData.lastName, formData.email, formData.role]);
+
+  // Test API connection on component mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        console.log("🔍 Testing backend connection...");
+        const response = await fetch(
+          `${process.env.REACT_APP_API_URL}/api/v1/health`
+        );
+        const data = await response.json();
+
+        if (response.ok && data.status === "success") {
+          setConnectionStatus("connected");
+          console.log("✅ Backend connection verified:", data);
+        } else {
+          setConnectionStatus("failed");
+          console.error("❌ Backend health check failed:", data);
+        }
+      } catch (error) {
+        setConnectionStatus("failed");
+        console.error("❌ Backend connection failed:", error.message);
+      }
+    };
+
+    checkConnection();
+  }, []);
 
   /**
    * Handle going back to previous page
@@ -335,6 +362,17 @@ const Register = () => {
     setErrors({});
 
     try {
+      // Test connection first
+      if (connectionStatus !== "connected") {
+        console.log("🔍 Testing connection before registration...");
+        const healthResponse = await fetch(
+          `${process.env.REACT_APP_API_URL}/api/v1/health`
+        );
+        if (!healthResponse.ok) {
+          throw new Error("Server is not responding");
+        }
+      }
+
       // Prepare registration data for PostgreSQL backend
       /** @type {RegisterData} */
       const registrationData = {
@@ -345,6 +383,11 @@ const Register = () => {
         password: formData.password,
         role: formData.role,
       };
+
+      console.log("🚀 Submitting registration:", {
+        email: registrationData.email,
+        role: registrationData.role,
+      });
 
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/api/v1/auth/register`,
@@ -386,10 +429,22 @@ const Register = () => {
             }));
           }
         } else if (response.status === 400) {
-          setErrors((prev) => ({
-            ...prev,
-            submit: data.message || "Invalid registration data",
-          }));
+          // Handle validation errors from express-validator
+          if (data.errors && Array.isArray(data.errors)) {
+            const validationErrors = {};
+            data.errors.forEach((error) => {
+              const field = error.path || error.param;
+              if (field) {
+                validationErrors[field] = error.msg || error.message;
+              }
+            });
+            setErrors((prev) => ({ ...prev, ...validationErrors }));
+          } else {
+            setErrors((prev) => ({
+              ...prev,
+              submit: data.message || "Invalid registration data",
+            }));
+          }
         } else {
           setErrors((prev) => ({
             ...prev,
@@ -399,15 +454,36 @@ const Register = () => {
         return;
       }
 
+      console.log("✅ Registration successful:", data);
+
+      // Store token if provided in the new response format
+      if (data.data?.token) {
+        localStorage.setItem("token", data.data.token);
+        localStorage.setItem("user", JSON.stringify(data.data.user));
+      }
+
       // Success - clear saved form data and show success
       localStorage.removeItem("registrationForm");
       setShowSuccessModal(true);
       setFormData(initialFormData);
     } catch (error) {
-      console.error("Registration error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to register";
-      setErrors((prev) => ({ ...prev, submit: errorMessage }));
+      console.error("❌ Registration error:", error);
+
+      // Handle different types of errors
+      if (
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("fetch")
+      ) {
+        setErrors({
+          submit: "Network error - please check your connection and try again",
+        });
+      } else if (error.message.includes("CORS")) {
+        setErrors({ submit: "Connection error - please contact support" });
+      } else {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to register";
+        setErrors((prev) => ({ ...prev, submit: errorMessage }));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -439,6 +515,21 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      {/* Connection Status Indicator */}
+      {connectionStatus && (
+        <div
+          className={`fixed top-4 right-4 z-50 p-3 rounded-lg text-sm max-w-sm ${
+            connectionStatus === "connected"
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-red-50 text-red-700 border border-red-200"
+          }`}
+        >
+          {connectionStatus === "connected"
+            ? "✅ Connected to server"
+            : "❌ Server connection failed - please refresh and try again"}
+        </div>
+      )}
+
       <Card className="max-w-md w-full">
         <CardHeader className="text-center relative">
           {/* Back Button */}
@@ -777,7 +868,7 @@ const Register = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || connectionStatus === "failed"}
                 className={`
                   w-full flex justify-center items-center py-2 px-4 border border-transparent 
                   rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 
