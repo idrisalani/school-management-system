@@ -66,62 +66,15 @@ const query = async (text, params = []) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// 🔄 Dynamic CORS Configuration - Adapts to Any Vercel Deployment URL
-const getAllowedOrigins = () => {
-  const origins = ["http://localhost:3000", "http://localhost:3001"];
-
-  // Add production URLs from environment
-  if (process.env.FRONTEND_URL) {
-    origins.push(process.env.FRONTEND_URL);
-  }
-
-  if (process.env.CORS_ORIGIN) {
-    origins.push(process.env.CORS_ORIGIN);
-  }
-
-  // Add Vercel deployment URLs pattern - works with ANY random deployment URL
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-    // Allow any school-management frontend on Vercel
-    origins.push(/^https:\/\/school-management-frontend-.*\.vercel\.app$/);
-    origins.push(/^https:\/\/school-management-.*edumanager\.vercel\.app$/);
-    origins.push(/^https:\/\/.*edumanager\.vercel\.app$/);
-  }
-
-  console.log("🔍 Allowed CORS origins:", origins);
-  return origins;
-};
-
+// 🔧 Bulletproof CORS Configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = getAllowedOrigins();
-
-    console.log(`🌐 CORS check for origin: ${origin}`);
-
-    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
-    if (!origin) {
-      console.log("✅ CORS: No origin - allowing");
-      return callback(null, true);
-    }
-
-    // Check if origin is allowed
-    const isAllowed = allowedOrigins.some((allowedOrigin) => {
-      if (typeof allowedOrigin === "string") {
-        return allowedOrigin === origin;
-      } else if (allowedOrigin instanceof RegExp) {
-        return allowedOrigin.test(origin);
-      }
-      return false;
-    });
-
-    if (isAllowed) {
-      console.log(`✅ CORS: Origin ${origin} is allowed`);
-      callback(null, true);
-    } else {
-      console.error(`❌ CORS: Origin ${origin} is blocked`);
-      console.error("Allowed origins:", allowedOrigins);
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://school-management-frontend-bay.vercel.app", // EXACT current frontend URL
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGIN,
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
