@@ -71,11 +71,10 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://school-management-system-smoky-seven.vercel.app",
-    "https://school-management-system-668kkjtnr-schoolms.vercel.app",
-    "https://school-management-frontend-*.vercel.app",
-    /\.vercel\.app$/,
+    "https://school-management-frontend-csnwfpv-edumanager.vercel.app", // NEW FRONTEND
+    /\.vercel\.app$/, // Catch-all for Vercel deployments
     process.env.FRONTEND_URL,
+    process.env.CORS_ORIGIN,
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
