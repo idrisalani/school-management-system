@@ -190,12 +190,13 @@ app.get("/api/v1/db-test", async (req, res) => {
 });
 
 // 🔐 Secure Auth Login - Support both email and username
+// 🔐 Fixed Auth Login - Matches your existing PostgreSQL schema
 app.post(
   "/api/v1/auth/login",
   [body("password").notEmpty().withMessage("Password is required")],
   async (req, res) => {
     try {
-      console.log("Login request received:", {
+      console.log("🔑 Login request received:", {
         hasEmail: !!req.body.email,
         hasUsername: !!req.body.username,
         timestamp: new Date().toISOString(),
@@ -229,27 +230,31 @@ app.post(
       }
 
       // Build query to support both email and username login
+      // UPDATED to match your existing schema (no first_name, last_name)
       let queryText;
       let queryParams;
 
       if (email) {
-        // Login with email
-        queryText = `SELECT id, username, email, first_name, last_name, role, password, created_at 
+        // Login with email - now includes separate name fields
+        queryText = `SELECT id, username, email, name, first_name, last_name, role, password, created_at 
                FROM users 
                WHERE email = $1 AND status = 'active'`;
         queryParams = [email.toLowerCase()];
       } else {
-        // Login with username
-        queryText = `SELECT id, username, email, first_name, last_name, role, password, created_at 
+        // Login with username - now includes separate name fields
+        queryText = `SELECT id, username, email, name, first_name, last_name, role, password, created_at 
                FROM users 
                WHERE username = $1 AND status = 'active'`;
         queryParams = [username];
       }
 
+      console.log("🔍 Searching for user...");
+
       // Get user with hashed password
       const result = await query(queryText, queryParams);
 
       if (result.rows.length === 0) {
+        console.log("❌ User not found");
         return res.status(401).json({
           status: "error",
           message: "Invalid credentials",
@@ -257,34 +262,37 @@ app.post(
       }
 
       const user = result.rows[0];
+      console.log("✅ User found:", user.email);
 
       // Compare password
       const passwordMatch = await bcrypt.compare(password, user.password);
       if (!passwordMatch) {
+        console.log("❌ Password mismatch");
         return res.status(401).json({
           status: "error",
           message: "Invalid credentials",
         });
       }
 
+      console.log("✅ Password verified, generating token...");
+
       // Generate JWT token
       const token = generateToken(user);
 
-      // Return user data (without password)
+      // Return user data (split name into firstName/lastName for frontend compatibility)
+      const nameParts = user.name ? user.name.split(" ") : ["", ""];
       const userResponse = {
         id: user.id,
         username: user.username,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        name: user.name,
         role: user.role,
         createdAt: user.created_at,
       };
 
-      console.log(
-        "User logged in successfully:",
-        userResponse.email || userResponse.username
-      );
+      console.log("🎉 Login successful for:", userResponse.email);
 
       res.json({
         status: "success",
@@ -295,7 +303,7 @@ app.post(
         },
       });
     } catch (error) {
-      console.error("Login error:", error.message);
+      console.error("💥 Login error:", error.message);
       res.status(500).json({
         status: "error",
         message: "Login failed",
@@ -307,6 +315,8 @@ app.post(
 );
 
 // 🔐 Secure Auth Register
+// If you choose Option 2 (add separate name columns), use this registration endpoint instead:
+
 app.post(
   "/api/v1/auth/register",
   [
@@ -331,13 +341,12 @@ app.post(
   ],
   async (req, res) => {
     try {
-      console.log("Registration request received:", {
+      console.log("🚀 Registration request received:", {
         email: req.body.email,
         role: req.body.role,
         timestamp: new Date().toISOString(),
       });
 
-      // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -348,7 +357,10 @@ app.post(
       }
 
       const { firstName, lastName, email, password, role } = req.body;
-      const username = `${firstName.trim()} ${lastName.trim()}`;
+
+      // Create full name AND store separate first/last names
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      const username = fullName;
 
       if (!process.env.DATABASE_URL) {
         return res.status(500).json({
@@ -374,38 +386,49 @@ app.post(
       const saltRounds = 12;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      // Create new user
+      // Create new user with separate first/last names + combined name
       const result = await query(
-        `INSERT INTO users (username, email, password, first_name, last_name, role, status, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW()) 
-       RETURNING id, username, email, first_name, last_name, role, created_at`,
+        `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
+         RETURNING id, username, email, name, first_name, last_name, role, created_at`,
         [
-          username,
-          email.toLowerCase(),
-          hashedPassword,
-          firstName.trim(),
-          lastName.trim(),
-          role,
+          username, // username
+          email.toLowerCase(), // email
+          hashedPassword, // password
+          fullName, // name (full name for compatibility)
+          firstName.trim(), // first_name (separate field)
+          lastName.trim(), // last_name (separate field)
+          role, // role
+          false, // is_verified
+          "active", // status
         ]
       );
 
       const user = result.rows[0];
+      console.log("✅ User created successfully:", {
+        id: user.id,
+        email: user.email,
+      });
 
       // Generate JWT token
       const token = generateToken(user);
 
-      // Return user data (without password)
+      // Return user data with proper first/last names (no splitting needed!)
       const userResponse = {
         id: user.id,
         username: user.username,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: user.first_name, // Direct from database
+        lastName: user.last_name, // Direct from database
+        name: user.name, // Full name also available
         role: user.role,
         createdAt: user.created_at,
       };
 
-      console.log("User registered successfully:", userResponse.email);
+      console.log(
+        "🎉 Registration completed successfully for:",
+        userResponse.email
+      );
 
       res.status(201).json({
         status: "success",
@@ -416,12 +439,10 @@ app.post(
         },
       });
     } catch (error) {
-      console.error("Registration error:", error.message);
+      console.error("💥 Registration error:", error);
 
-      // Handle specific PostgreSQL errors
       if (error.code === "23505") {
-        // Unique constraint violation
-        const field = error.detail.includes("email") ? "email" : "username";
+        const field = error.detail?.includes("email") ? "email" : "username";
         return res.status(409).json({
           status: "error",
           message: `${
@@ -433,39 +454,50 @@ app.post(
       res.status(500).json({
         status: "error",
         message: "Registration failed",
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        debug: {
+          error: error.message,
+          code: error.code,
+        },
       });
     }
   }
 );
 
-// Get users
+// Get users - UPDATED to match your existing PostgreSQL schema
 app.get("/api/v1/users", async (req, res) => {
   try {
+    console.log("👥 Get users request received");
+
+    // Updated query to include separate name fields
     const result = await query(
-      `SELECT id, username, email, first_name, last_name, role, status, created_at 
+      `SELECT id, username, email, name, first_name, last_name, role, status, is_verified, created_at 
        FROM users ORDER BY created_at DESC LIMIT 100`
     );
+
+    console.log(`✅ Found ${result.rows.length} users`);
 
     res.json({
       status: "success",
       data: {
-        users: result.rows.map((user) => ({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role,
-          status: user.status,
-          createdAt: user.created_at,
-        })),
+        users: result.rows.map((user) => {
+          return {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            firstName: user.first_name || "", // Direct from database
+            lastName: user.last_name || "", // Direct from database
+            name: user.name, // Full name also available
+            role: user.role,
+            status: user.status,
+            isVerified: user.is_verified,
+            createdAt: user.created_at,
+          };
+        }),
         total: result.rows.length,
       },
     });
   } catch (error) {
-    console.error("Get users error:", error.message);
+    console.error("💥 Get users error:", error.message);
     res.status(500).json({
       status: "error",
       message: "Failed to fetch users",
