@@ -338,253 +338,78 @@ app.post(
 
 // 🔧 FIXED Registration Endpoint - Prevents NULL name values
 
-app.post(
-  "/api/v1/auth/register",
-  [
-    body("firstName")
-      .trim()
-      .isLength({ min: 2 })
-      .withMessage("First name must be at least 2 characters"),
-    body("lastName")
-      .trim()
-      .isLength({ min: 2 })
-      .withMessage("Last name must be at least 2 characters"),
-    body("email")
-      .isEmail()
-      .normalizeEmail()
-      .withMessage("Please provide a valid email"),
-    body("password")
-      .isLength({ min: 8 })
-      .withMessage("Password must be at least 8 characters"),
-    body("role")
-      .isIn(["student", "teacher", "parent"])
-      .withMessage("Invalid role"),
-  ],
-  async (req, res) => {
-    try {
-      console.log("🚀 Registration request received:", {
-        email: req.body.email,
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        role: req.body.role,
-        timestamp: new Date().toISOString(),
-      });
+// 🔧 MINIMAL Registration Endpoint - Simplified to work with basic functionality
 
-      // Check validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log("❌ Validation errors:", errors.array());
-        return res.status(400).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-        });
-      }
+app.post("/api/v1/auth/register", async (req, res) => {
+  try {
+    console.log("🚀 MINIMAL Registration attempt:", req.body);
 
-      const { firstName, lastName, email, password, role } = req.body;
+    const { firstName, lastName, email, password, role } = req.body;
 
-      // FIXED: Ensure name fields are never null/undefined/empty
-      const cleanFirstName = (firstName || "").toString().trim();
-      const cleanLastName = (lastName || "").toString().trim();
-
-      // Double-check we have valid names
-      if (!cleanFirstName || !cleanLastName) {
-        console.log("❌ Invalid name data:", { cleanFirstName, cleanLastName });
-        return res.status(400).json({
-          status: "error",
-          message: "First name and last name are required",
-        });
-      }
-
-      // Create username and full name with guaranteed non-null values
-      const username = `${cleanFirstName.toLowerCase()}.${cleanLastName.toLowerCase()}`;
-      const fullName = `${cleanFirstName} ${cleanLastName}`;
-
-      console.log("🔍 Processing registration for:", {
-        username, // john.smith
-        fullName, // John Smith (guaranteed non-null)
-        firstName: cleanFirstName,
-        lastName: cleanLastName,
-        email: email.toLowerCase(),
-      });
-
-      // Verify fullName is not null/empty before proceeding
-      if (!fullName || fullName.trim() === "" || fullName.trim() === " ") {
-        console.log("❌ Full name is invalid:", {
-          fullName,
-          length: fullName.length,
-        });
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid name combination",
-        });
-      }
-
-      if (!process.env.DATABASE_URL) {
-        console.log("❌ DATABASE_URL not configured");
-        return res.status(500).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
-
-      console.log("🔍 Checking for existing user...");
-
-      // Check if user already exists
-      const existingUser = await query(
-        "SELECT id, email, username FROM users WHERE email = $1 OR username = $2",
-        [email.toLowerCase(), username]
-      );
-
-      if (existingUser.rows.length > 0) {
-        const existing = existingUser.rows[0];
-        if (existing.email === email.toLowerCase()) {
-          console.log("❌ Email already exists:", email);
-          return res.status(409).json({
-            status: "error",
-            message: "Email address is already registered",
-          });
-        } else if (existing.username === username) {
-          console.log("❌ Username already exists:", username);
-          return res.status(409).json({
-            status: "error",
-            message:
-              "This name combination is already taken. Please try a different name.",
-          });
-        }
-      }
-
-      console.log("✅ Email and username available, hashing password...");
-
-      // Hash password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-      console.log("✅ Password hashed, creating user...");
-      console.log("📊 Final values check:", {
-        username: username || "NULL",
-        email: email.toLowerCase() || "NULL",
-        name: fullName || "NULL",
-        first_name: cleanFirstName || "NULL",
-        last_name: cleanLastName || "NULL",
-        role: role || "NULL",
-      });
-
-      // Insert user with explicit null checks
-      const result = await query(
-        `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
-         RETURNING id, username, email, name, first_name, last_name, role, created_at`,
-        [
-          username || null, // $1 - username (allow null if somehow empty)
-          email.toLowerCase() || null, // $2 - email
-          hashedPassword || null, // $3 - password
-          fullName || null, // $4 - name (this was the issue!)
-          cleanFirstName || null, // $5 - first_name
-          cleanLastName || null, // $6 - last_name
-          role || null, // $7 - role
-          false, // $8 - is_verified
-          "active", // $9 - status
-        ]
-      );
-
-      const user = result.rows[0];
-      console.log("✅ User created successfully:", {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        firstName: user.first_name,
-        lastName: user.last_name,
-      });
-
-      // Generate JWT token
-      const token = jwt.sign(
-        {
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-        },
-        process.env.JWT_SECRET || "fallback-secret-key",
-        { expiresIn: "7d" }
-      );
-
-      // Return user data
-      const userResponse = {
-        id: user.id,
-        username: user.username, // john.smith
-        email: user.email,
-        firstName: user.first_name, // John
-        lastName: user.last_name, // Smith
-        name: user.name, // John Smith
-        role: user.role,
-        createdAt: user.created_at,
-      };
-
-      console.log(
-        "🎉 Registration completed successfully for:",
-        userResponse.email
-      );
-      console.log("🎯 New username format:", userResponse.username);
-
-      res.status(201).json({
-        status: "success",
-        message: "User registered successfully",
-        data: {
-          user: userResponse,
-          token: token,
-        },
-      });
-    } catch (error) {
-      console.error("💥 Registration error:", error);
-      console.error("📍 Error details:", {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        detail: error.detail,
-      });
-
-      // Handle specific PostgreSQL errors
-      if (error.code === "23505") {
-        // Unique constraint violation
-        if (error.detail?.includes("username")) {
-          return res.status(409).json({
-            status: "error",
-            message:
-              "This name combination is already taken. Please try a different name.",
-          });
-        } else if (error.detail?.includes("email")) {
-          return res.status(409).json({
-            status: "error",
-            message: "Email address is already registered",
-          });
-        }
-      }
-
-      if (error.code === "23502") {
-        // Not-null constraint violation
-        console.error("❌ NULL constraint violation:", error.detail);
-        return res.status(400).json({
-          status: "error",
-          message: "Missing required field - please fill in all information",
-          debug: error.detail,
-        });
-      }
-
-      res.status(500).json({
+    // Basic validation
+    if (!firstName || !lastName || !email || !password || !role) {
+      return res.status(400).json({
         status: "error",
-        message: "Registration failed",
-        debug:
-          process.env.NODE_ENV === "development"
-            ? {
-                error: error.message,
-                code: error.code,
-              }
-            : undefined,
+        message: "All fields are required",
       });
     }
+
+    // Create simple values
+    const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
+    const fullName = `${firstName} ${lastName}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    console.log("📊 Inserting:", {
+      username,
+      email,
+      fullName,
+      role,
+    });
+
+    // Minimal insert - only required fields
+    const result = await query(
+      `INSERT INTO users (email, password, name, role) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING id, email, name, role`,
+      [email.toLowerCase(), hashedPassword, fullName, role]
+    );
+
+    console.log("✅ User created:", result.rows[0]);
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: result.rows[0].id, email: result.rows[0].email },
+      process.env.JWT_SECRET || "secret",
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      status: "success",
+      message: "User registered successfully",
+      data: {
+        user: {
+          id: result.rows[0].id,
+          email: result.rows[0].email,
+          name: result.rows[0].name,
+          role: result.rows[0].role,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("💥 Registration error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Registration failed",
+      debug: {
+        error: error.message,
+        code: error.code,
+        detail: error.detail,
+      },
+    });
   }
-);
+});
 
 // Add this DEBUG endpoint temporarily to your server.js (REMOVE in production)
 app.get("/api/v1/debug/registration", async (req, res) => {
