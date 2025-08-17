@@ -1,6 +1,6 @@
--- server/database/schema.sql - Complete PostgreSQL Schema
+-- server/database/schema.sql - Complete PostgreSQL Schema (Updated)
 -- School Management System Database Schema
--- This file contains the complete database structure
+-- This file contains the complete database structure with separate name columns
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -22,13 +22,15 @@ DROP TABLE IF EXISTS classes CASCADE;
 DROP TABLE IF EXISTS departments CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
--- Users table (students, teachers, admins, parents)
+-- Users table (students, teachers, admins, parents) - UPDATED with separate name columns
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     username VARCHAR(50) UNIQUE,
     password VARCHAR(255) NOT NULL,
-    name VARCHAR(100) NOT NULL,
+    name VARCHAR(100) NOT NULL,                    -- Full name (for compatibility)
+    first_name VARCHAR(100),                       -- NEW: Separate first name
+    last_name VARCHAR(100),                        -- NEW: Separate last name
     role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'teacher', 'student', 'parent')),
     phone VARCHAR(20),
     address TEXT,
@@ -239,11 +241,13 @@ CREATE TABLE sync_changes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for better performance
+-- Create indexes for better performance - UPDATED to include separate name columns
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_first_name ON users(first_name);     -- NEW: Index on first_name
+CREATE INDEX idx_users_last_name ON users(last_name);       -- NEW: Index on last_name
 
 CREATE INDEX idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX idx_classes_department ON classes(department_id);
@@ -336,11 +340,11 @@ CREATE TRIGGER update_schedules_updated_at BEFORE UPDATE ON schedules
 CREATE TRIGGER update_announcements_updated_at BEFORE UPDATE ON announcements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert default admin user
-INSERT INTO users (email, username, password, name, role, is_verified, status) VALUES
-('admin@schoolms.com', 'admin', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'admin', true, 'active');
+-- Insert default admin user - UPDATED to include separate name fields
+INSERT INTO users (email, username, password, name, first_name, last_name, role, is_verified, status) VALUES
+('admin@schoolms.com', 'admin', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'System', 'Administrator', 'admin', true, 'active');
 
--- Insert sample department
+-- Insert sample departments
 INSERT INTO departments (name, code, description) VALUES
 ('Computer Science', 'CS', 'Department of Computer Science and Information Technology'),
 ('Mathematics', 'MATH', 'Department of Mathematics'),
@@ -359,5 +363,7 @@ INSERT INTO sync_versions (entity_type, current_version) VALUES
 DO $$
 BEGIN
     RAISE NOTICE 'School Management System database schema created successfully!';
+    RAISE NOTICE 'Updated with separate first_name and last_name columns for better name handling';
     RAISE NOTICE 'Default admin user: admin@schoolms.com / password: admin123';
+    RAISE NOTICE 'Admin name stored as: name="System Administrator", first_name="System", last_name="Administrator"';
 END $$;
