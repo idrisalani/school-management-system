@@ -191,6 +191,8 @@ app.get("/api/v1/db-test", async (req, res) => {
 
 // 🔐 Secure Auth Login - Support both email and username
 // 🔐 Fixed Auth Login - Matches your existing PostgreSQL schema
+// 🔧 UPDATED Login Endpoint - No major changes needed, but enhanced logging
+
 app.post(
   "/api/v1/auth/login",
   [body("password").notEmpty().withMessage("Password is required")],
@@ -199,6 +201,11 @@ app.post(
       console.log("🔑 Login request received:", {
         hasEmail: !!req.body.email,
         hasUsername: !!req.body.username,
+        usernameFormat: req.body.username
+          ? req.body.username.includes(".")
+            ? "firstname.lastname"
+            : "legacy"
+          : "none",
         timestamp: new Date().toISOString(),
       });
 
@@ -230,25 +237,24 @@ app.post(
       }
 
       // Build query to support both email and username login
-      // UPDATED to match your existing schema (no first_name, last_name)
       let queryText;
       let queryParams;
 
       if (email) {
-        // Login with email - now includes separate name fields
+        // Login with email
         queryText = `SELECT id, username, email, name, first_name, last_name, role, password, created_at 
                FROM users 
                WHERE email = $1 AND status = 'active'`;
         queryParams = [email.toLowerCase()];
+        console.log("🔍 Searching by email:", email.toLowerCase());
       } else {
-        // Login with username - now includes separate name fields
+        // Login with username (now supports both firstname.lastname AND legacy "First Last" format)
         queryText = `SELECT id, username, email, name, first_name, last_name, role, password, created_at 
                FROM users 
                WHERE username = $1 AND status = 'active'`;
         queryParams = [username];
+        console.log("🔍 Searching by username:", username);
       }
-
-      console.log("🔍 Searching for user...");
 
       // Get user with hashed password
       const result = await query(queryText, queryParams);
@@ -262,7 +268,13 @@ app.post(
       }
 
       const user = result.rows[0];
-      console.log("✅ User found:", user.email);
+      console.log("✅ User found:", {
+        email: user.email,
+        username: user.username,
+        usernameFormat: user.username.includes(".")
+          ? "firstname.lastname"
+          : "legacy",
+      });
 
       // Compare password
       const passwordMatch = await bcrypt.compare(password, user.password);
@@ -279,20 +291,25 @@ app.post(
       // Generate JWT token
       const token = generateToken(user);
 
-      // Return user data (split name into firstName/lastName for frontend compatibility)
-      const nameParts = user.name ? user.name.split(" ") : ["", ""];
+      // Return user data with actual separate name fields
       const userResponse = {
         id: user.id,
-        username: user.username,
+        username: user.username, // Could be john.smith or "John Smith" (legacy)
         email: user.email,
-        firstName: nameParts[0] || "",
-        lastName: nameParts.slice(1).join(" ") || "",
-        name: user.name,
+        firstName: user.first_name || "", // Direct from database
+        lastName: user.last_name || "", // Direct from database
+        name: user.name, // Full name also available
         role: user.role,
         createdAt: user.created_at,
       };
 
-      console.log("🎉 Login successful for:", userResponse.email);
+      console.log("🎉 Login successful for:", {
+        email: userResponse.email,
+        username: userResponse.username,
+        usernameFormat: userResponse.username.includes(".")
+          ? "NEW (firstname.lastname)"
+          : "LEGACY (First Last)",
+      });
 
       res.json({
         status: "success",
@@ -315,7 +332,9 @@ app.post(
 );
 
 // 🔐 Secure Auth Register
-// If you choose Option 2 (add separate name columns), use this registration endpoint instead:
+// 🔐 REPLACE your existing registration endpoint in server.js with this:
+
+// 🔐 UPDATED Registration Endpoint - Creates username as firstname.lastname
 
 app.post(
   "/api/v1/auth/register",
@@ -343,12 +362,16 @@ app.post(
     try {
       console.log("🚀 Registration request received:", {
         email: req.body.email,
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
         role: req.body.role,
         timestamp: new Date().toISOString(),
       });
 
+      // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log("❌ Validation errors:", errors.array());
         return res.status(400).json({
           status: "error",
           message: "Validation failed",
@@ -358,46 +381,76 @@ app.post(
 
       const { firstName, lastName, email, password, role } = req.body;
 
-      // Create full name AND store separate first/last names
-      const fullName = `${firstName.trim()} ${lastName.trim()}`;
-      const username = fullName;
+      // Create username as firstname.lastname (lowercase, no spaces)
+      const username = `${firstName.trim().toLowerCase()}.${lastName
+        .trim()
+        .toLowerCase()}`;
+      const fullName = `${firstName.trim()} ${lastName.trim()}`; // For the name field
+
+      console.log("🔍 Processing registration for:", {
+        username, // NEW: john.smith
+        fullName, // John Smith
+        firstName, // John
+        lastName, // Smith
+        email: email.toLowerCase(),
+      });
 
       if (!process.env.DATABASE_URL) {
+        console.log("❌ DATABASE_URL not configured");
         return res.status(500).json({
           status: "error",
           message: "Database not configured",
         });
       }
 
-      // Check if user already exists
+      console.log("🔍 Checking for existing user...");
+
+      // Check if user already exists (email OR username)
       const existingUser = await query(
-        "SELECT id FROM users WHERE email = $1 OR username = $2",
+        "SELECT id, email, username FROM users WHERE email = $1 OR username = $2",
         [email.toLowerCase(), username]
       );
 
       if (existingUser.rows.length > 0) {
-        return res.status(409).json({
-          status: "error",
-          message: "Email address is already registered",
-        });
+        const existing = existingUser.rows[0];
+        if (existing.email === email.toLowerCase()) {
+          console.log("❌ Email already exists:", email);
+          return res.status(409).json({
+            status: "error",
+            message: "Email address is already registered",
+          });
+        } else if (existing.username === username) {
+          console.log("❌ Username already exists:", username);
+          return res.status(409).json({
+            status: "error",
+            message:
+              "This name combination is already taken. Please try a different name.",
+          });
+        }
       }
+
+      console.log("✅ Email and username available, hashing password...");
 
       // Hash password
       const saltRounds = 12;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      // Create new user with separate first/last names + combined name
+      console.log(
+        "✅ Password hashed, creating user with firstname.lastname username..."
+      );
+
+      // Insert user with firstname.lastname username format
       const result = await query(
         `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
          RETURNING id, username, email, name, first_name, last_name, role, created_at`,
         [
-          username, // username
+          username, // firstname.lastname (e.g., john.smith)
           email.toLowerCase(), // email
           hashedPassword, // password
-          fullName, // name (full name for compatibility)
-          firstName.trim(), // first_name (separate field)
-          lastName.trim(), // last_name (separate field)
+          fullName, // name (John Smith - for display)
+          firstName.trim(), // first_name (John)
+          lastName.trim(), // last_name (Smith)
           role, // role
           false, // is_verified
           "active", // status
@@ -407,20 +460,24 @@ app.post(
       const user = result.rows[0];
       console.log("✅ User created successfully:", {
         id: user.id,
+        username: user.username, // john.smith
         email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        fullName: user.name,
       });
 
       // Generate JWT token
       const token = generateToken(user);
 
-      // Return user data with proper first/last names (no splitting needed!)
+      // Return user data with proper separate name fields
       const userResponse = {
         id: user.id,
-        username: user.username,
+        username: user.username, // john.smith
         email: user.email,
-        firstName: user.first_name, // Direct from database
-        lastName: user.last_name, // Direct from database
-        name: user.name, // Full name also available
+        firstName: user.first_name, // John
+        lastName: user.last_name, // Smith
+        name: user.name, // John Smith
         role: user.role,
         createdAt: user.created_at,
       };
@@ -429,6 +486,7 @@ app.post(
         "🎉 Registration completed successfully for:",
         userResponse.email
       );
+      console.log("🎯 New username format:", userResponse.username);
 
       res.status(201).json({
         status: "success",
@@ -440,28 +498,159 @@ app.post(
       });
     } catch (error) {
       console.error("💥 Registration error:", error);
+      console.error("📍 Error details:", {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
 
+      // Handle specific PostgreSQL errors
       if (error.code === "23505") {
-        const field = error.detail?.includes("email") ? "email" : "username";
-        return res.status(409).json({
+        // Unique constraint violation
+        if (error.detail?.includes("username")) {
+          return res.status(409).json({
+            status: "error",
+            message:
+              "This name combination is already taken. Please try a different name.",
+          });
+        } else if (error.detail?.includes("email")) {
+          return res.status(409).json({
+            status: "error",
+            message: "Email address is already registered",
+          });
+        } else {
+          return res.status(409).json({
+            status: "error",
+            message: "User already exists",
+          });
+        }
+      }
+
+      if (error.code === "23502") {
+        return res.status(400).json({
           status: "error",
-          message: `${
-            field === "email" ? "Email address" : "Username"
-          } is already registered`,
+          message: "Missing required field",
+          debug: error.detail,
         });
       }
 
       res.status(500).json({
         status: "error",
         message: "Registration failed",
-        debug: {
-          error: error.message,
-          code: error.code,
-        },
+        debug:
+          process.env.NODE_ENV === "development"
+            ? {
+                error: error.message,
+                code: error.code,
+                postgresError: !!error.code,
+              }
+            : undefined,
       });
     }
   }
 );
+
+// Add this DEBUG endpoint temporarily to your server.js (REMOVE in production)
+app.get("/api/v1/debug/registration", async (req, res) => {
+  try {
+    console.log("🔍 Registration debug endpoint called");
+
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      environment: {
+        nodeVersion: process.version,
+        nodeEnv: process.env.NODE_ENV,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        hasJwtSecret: !!process.env.JWT_SECRET,
+      },
+      database: {
+        connectionStatus: "testing...",
+      },
+    };
+
+    // Test database connection
+    if (process.env.DATABASE_URL) {
+      try {
+        console.log("🐘 Testing PostgreSQL connection...");
+
+        // Test basic connection
+        const timeResult = await query("SELECT NOW() as current_time");
+        debugInfo.database.connectionStatus = "SUCCESS";
+        debugInfo.database.currentTime = timeResult.rows[0].current_time;
+
+        // Check if users table exists and has the right columns
+        const tableStructure = await query(`
+          SELECT column_name, data_type, is_nullable
+          FROM information_schema.columns 
+          WHERE table_name = 'users' AND table_schema = 'public'
+          ORDER BY ordinal_position;
+        `);
+
+        debugInfo.database.usersTableExists = tableStructure.rows.length > 0;
+        debugInfo.database.usersTableColumns = tableStructure.rows.map(
+          (row) => ({
+            name: row.column_name,
+            type: row.data_type,
+            nullable: row.is_nullable === "YES",
+          })
+        );
+
+        // Check for specific columns we need
+        const requiredColumns = [
+          "first_name",
+          "last_name",
+          "name",
+          "email",
+          "password",
+          "role",
+        ];
+        const existingColumns = tableStructure.rows.map(
+          (row) => row.column_name
+        );
+
+        debugInfo.database.hasRequiredColumns = {
+          first_name: existingColumns.includes("first_name"),
+          last_name: existingColumns.includes("last_name"),
+          name: existingColumns.includes("name"),
+          email: existingColumns.includes("email"),
+          password: existingColumns.includes("password"),
+          role: existingColumns.includes("role"),
+          username: existingColumns.includes("username"),
+          is_verified: existingColumns.includes("is_verified"),
+          status: existingColumns.includes("status"),
+        };
+
+        // Test a simple query
+        const userCount = await query("SELECT COUNT(*) as count FROM users");
+        debugInfo.database.userCount = parseInt(userCount.rows[0].count);
+      } catch (dbError) {
+        console.error("💥 Database test failed:", dbError);
+        debugInfo.database.connectionStatus = "FAILED";
+        debugInfo.database.error = dbError.message;
+        debugInfo.database.errorCode = dbError.code;
+      }
+    } else {
+      debugInfo.database.connectionStatus = "NO_CONNECTION_STRING";
+    }
+
+    console.log("📊 Registration debug info collected:", debugInfo);
+
+    res.json({
+      status: "success",
+      message: "Registration debug information collected",
+      data: debugInfo,
+    });
+  } catch (error) {
+    console.error("💥 Debug endpoint error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Debug endpoint failed",
+      error: error.message,
+    });
+  }
+});
 
 // Get users - UPDATED to match your existing PostgreSQL schema
 app.get("/api/v1/users", async (req, res) => {

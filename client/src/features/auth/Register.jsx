@@ -354,6 +354,8 @@ const Register = () => {
    * Handle form submission
    * @param {React.FormEvent} e - Form event
    */
+  // 🔧 UPDATE this section in your Register.jsx file
+  // Find the handleSubmit function and update the registrationData object:
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -373,18 +375,22 @@ const Register = () => {
         }
       }
 
+      // Create username as firstname.lastname (NEW FORMAT)
+      const username = `${formData.firstName.trim().toLowerCase()}.${formData.lastName.trim().toLowerCase()}`;
+
       // Prepare registration data for PostgreSQL backend
       /** @type {RegisterData} */
       const registrationData = {
-        username: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
+        username: username, // NEW: john.smith format
+        firstName: formData.firstName.trim(), // John
+        lastName: formData.lastName.trim(), // Smith
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
         role: formData.role,
       };
 
       console.log("🚀 Submitting registration:", {
+        username: registrationData.username, // NEW: Show the john.smith format
         email: registrationData.email,
         role: registrationData.role,
       });
@@ -417,10 +423,11 @@ const Register = () => {
               ...prev,
               email: "Email address is already registered",
             }));
-          } else if (data.message?.includes("username")) {
+          } else if (data.message?.includes("name combination")) {
             setErrors((prev) => ({
               ...prev,
-              firstName: "This name combination is already taken",
+              firstName:
+                "This name combination is already taken. Please try a different name.",
             }));
           } else {
             setErrors((prev) => ({
@@ -455,6 +462,7 @@ const Register = () => {
       }
 
       console.log("✅ Registration successful:", data);
+      console.log("🎯 New username created:", data.data?.user?.username); // Will show john.smith
 
       // Store token if provided in the new response format
       if (data.data?.token) {
