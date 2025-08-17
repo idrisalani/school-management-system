@@ -336,6 +336,8 @@ app.post(
 
 // 🔐 UPDATED Registration Endpoint - Creates username as firstname.lastname
 
+// 🔧 FIXED Registration Endpoint - Prevents NULL name values
+
 app.post(
   "/api/v1/auth/register",
   [
@@ -381,19 +383,42 @@ app.post(
 
       const { firstName, lastName, email, password, role } = req.body;
 
-      // Create username as firstname.lastname (lowercase, no spaces)
-      const username = `${firstName.trim().toLowerCase()}.${lastName
-        .trim()
-        .toLowerCase()}`;
-      const fullName = `${firstName.trim()} ${lastName.trim()}`; // For the name field
+      // FIXED: Ensure name fields are never null/undefined/empty
+      const cleanFirstName = (firstName || "").toString().trim();
+      const cleanLastName = (lastName || "").toString().trim();
+
+      // Double-check we have valid names
+      if (!cleanFirstName || !cleanLastName) {
+        console.log("❌ Invalid name data:", { cleanFirstName, cleanLastName });
+        return res.status(400).json({
+          status: "error",
+          message: "First name and last name are required",
+        });
+      }
+
+      // Create username and full name with guaranteed non-null values
+      const username = `${cleanFirstName.toLowerCase()}.${cleanLastName.toLowerCase()}`;
+      const fullName = `${cleanFirstName} ${cleanLastName}`;
 
       console.log("🔍 Processing registration for:", {
-        username, // NEW: john.smith
-        fullName, // John Smith
-        firstName, // John
-        lastName, // Smith
+        username, // john.smith
+        fullName, // John Smith (guaranteed non-null)
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
         email: email.toLowerCase(),
       });
+
+      // Verify fullName is not null/empty before proceeding
+      if (!fullName || fullName.trim() === "" || fullName.trim() === " ") {
+        console.log("❌ Full name is invalid:", {
+          fullName,
+          length: fullName.length,
+        });
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid name combination",
+        });
+      }
 
       if (!process.env.DATABASE_URL) {
         console.log("❌ DATABASE_URL not configured");
@@ -405,7 +430,7 @@ app.post(
 
       console.log("🔍 Checking for existing user...");
 
-      // Check if user already exists (email OR username)
+      // Check if user already exists
       const existingUser = await query(
         "SELECT id, email, username FROM users WHERE email = $1 OR username = $2",
         [email.toLowerCase(), username]
@@ -435,42 +460,56 @@ app.post(
       const saltRounds = 12;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      console.log(
-        "✅ Password hashed, creating user with firstname.lastname username..."
-      );
+      console.log("✅ Password hashed, creating user...");
+      console.log("📊 Final values check:", {
+        username: username || "NULL",
+        email: email.toLowerCase() || "NULL",
+        name: fullName || "NULL",
+        first_name: cleanFirstName || "NULL",
+        last_name: cleanLastName || "NULL",
+        role: role || "NULL",
+      });
 
-      // Insert user with firstname.lastname username format
+      // Insert user with explicit null checks
       const result = await query(
         `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
          RETURNING id, username, email, name, first_name, last_name, role, created_at`,
         [
-          username, // firstname.lastname (e.g., john.smith)
-          email.toLowerCase(), // email
-          hashedPassword, // password
-          fullName, // name (John Smith - for display)
-          firstName.trim(), // first_name (John)
-          lastName.trim(), // last_name (Smith)
-          role, // role
-          false, // is_verified
-          "active", // status
+          username || null, // $1 - username (allow null if somehow empty)
+          email.toLowerCase() || null, // $2 - email
+          hashedPassword || null, // $3 - password
+          fullName || null, // $4 - name (this was the issue!)
+          cleanFirstName || null, // $5 - first_name
+          cleanLastName || null, // $6 - last_name
+          role || null, // $7 - role
+          false, // $8 - is_verified
+          "active", // $9 - status
         ]
       );
 
       const user = result.rows[0];
       console.log("✅ User created successfully:", {
         id: user.id,
-        username: user.username, // john.smith
+        username: user.username,
         email: user.email,
+        name: user.name,
         firstName: user.first_name,
         lastName: user.last_name,
-        fullName: user.name,
       });
 
       // Generate JWT token
-      const token = generateToken(user);
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+        },
+        process.env.JWT_SECRET || "fallback-secret-key",
+        { expiresIn: "7d" }
+      );
 
-      // Return user data with proper separate name fields
+      // Return user data
       const userResponse = {
         id: user.id,
         username: user.username, // john.smith
@@ -519,18 +558,15 @@ app.post(
             status: "error",
             message: "Email address is already registered",
           });
-        } else {
-          return res.status(409).json({
-            status: "error",
-            message: "User already exists",
-          });
         }
       }
 
       if (error.code === "23502") {
+        // Not-null constraint violation
+        console.error("❌ NULL constraint violation:", error.detail);
         return res.status(400).json({
           status: "error",
-          message: "Missing required field",
+          message: "Missing required field - please fill in all information",
           debug: error.detail,
         });
       }
@@ -543,7 +579,6 @@ app.post(
             ? {
                 error: error.message,
                 code: error.code,
-                postgresError: !!error.code,
               }
             : undefined,
       });
