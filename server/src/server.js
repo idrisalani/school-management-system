@@ -2657,5 +2657,3 @@ if (process.env.NODE_ENV !== "production") {
     console.log(`📚 API Documentation: http://localhost:${PORT}/`);
   });
 }
-/ /   B a c k e n d   a u t o - d e p l o y   t e s t   -   0 8 / 1 8 / 2 0 2 5   1 8 : 5 8 : 0 1  
- 
