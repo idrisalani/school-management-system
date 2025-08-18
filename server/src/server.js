@@ -150,32 +150,6 @@ const generateToken = (user) => {
   );
 };
 
-const verifyToken = (req, res, next) => {
-  const token =
-    req.headers.authorization?.split(" ")[1] || req.headers["x-access-token"];
-
-  if (!token) {
-    return res.status(401).json({
-      status: "error",
-      message: "Access token required",
-    });
-  }
-
-  try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "fallback-secret-key-change-in-production"
-    );
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      status: "error",
-      message: "Invalid or expired token",
-    });
-  }
-};
-
 const checkRole = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
