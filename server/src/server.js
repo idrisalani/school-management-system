@@ -2620,9 +2620,16 @@ app.use((err, req, res, next) => {
 });
 
 // ========================= SERVER EXPORT =========================
+
+// Export for Vercel serverless functions
 export default app;
 
-// Local development
+// Also provide CommonJS export for compatibility
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = app;
+}
+
+// Local development server
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
