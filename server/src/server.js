@@ -2604,6 +2604,7 @@ app.get(
   }
 );
 
+// Error Handling starts from here
 // ========================= ERROR HANDLING =========================
 
 // 404 handler
@@ -2656,3 +2657,5 @@ if (process.env.NODE_ENV !== "production") {
     console.log(`📚 API Documentation: http://localhost:${PORT}/`);
   });
 }
+/ /   F o r c e   d e p l o y m e n t   w i t h   c o r r e c t   r o o t   d i r e c t o r y   -   0 8 / 1 8 / 2 0 2 5   1 7 : 3 6 : 0 6  
+ 
