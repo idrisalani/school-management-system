@@ -278,6 +278,8 @@ app.post(
       const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
       const fullName = `${firstName} ${lastName}`;
 
+      console.log("🔧 Generated username:", username); // Debug log
+      console.log("🔧 Generated name:", fullName); // Debug log
       console.log("🔍 Creating user:", { username, email, role });
 
       // Check for existing user
