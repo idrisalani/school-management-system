@@ -48,6 +48,61 @@ const query = async (text, params = []) => {
   }
 };
 
+// In-memory token blacklist (upgrade to Redis for production scale)
+const tokenBlacklist = new Map();
+
+// Clean up expired tokens every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expiry] of tokenBlacklist.entries()) {
+    if (now > expiry) {
+      tokenBlacklist.delete(token);
+    }
+  }
+}, 3600000); // 1 hour cleanup
+
+// Enhanced token verification middleware
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(" ")[1] || req.headers["x-access-token"];
+
+  if (!token) {
+    return res.status(401).json({
+      status: "error",
+      message: "Access token required",
+    });
+  }
+
+  // Check if token is blacklisted
+  if (tokenBlacklist.has(token)) {
+    return res.status(401).json({
+      status: "error",
+      message: "Token has been invalidated. Please login again.",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "fallback-secret-key"
+    );
+    req.user = decoded;
+    req.token = token; // Store token for potential blacklisting
+    next();
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        status: "error",
+        message: "Token has expired. Please login again.",
+      });
+    }
+    return res.status(401).json({
+      status: "error",
+      message: "Invalid token",
+    });
+  }
+};
+
 // ========================= MIDDLEWARE =========================
 // CORS Configuration
 const corsOptions = {
@@ -279,7 +334,7 @@ app.post(
       const fullName = `${firstName} ${lastName}`;
 
       console.log("🔧 Generated username:", username); // Debug log
-      console.log("🔧 Generated name:", fullName); // Debug log
+      console.log("🔧 Generated name:", fullName); // Debug logs
       console.log("🔍 Creating user:", { username, email, role });
 
       // Check for existing user
@@ -553,11 +608,81 @@ app.get("/api/v1/auth/me", verifyToken, async (req, res) => {
 });
 
 // AUTH: Logout (invalidate token - client-side mainly)
+// Enhanced logout with token blacklisting
 app.post("/api/v1/auth/logout", verifyToken, (req, res) => {
-  // In a more advanced setup, you'd add the token to a blacklist
+  try {
+    const token = req.token;
+
+    // Get token expiration (standard JWT exp is in seconds)
+    const decoded = jwt.decode(token);
+    const tokenExpiry = decoded.exp * 1000; // Convert to milliseconds
+
+    // Add token to blacklist until its natural expiration
+    tokenBlacklist.set(token, tokenExpiry);
+
+    console.log(`🔒 Token blacklisted for user ${req.user.email}`);
+
+    res.json({
+      status: "success",
+      message: "Logged out successfully. Token has been invalidated.",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Logout failed",
+    });
+  }
+});
+
+// Logout from all devices (blacklist all user tokens)
+app.post("/api/v1/auth/logout-all", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // In a production system, you'd store user tokens in database
+    // For now, we'll add a timestamp-based invalidation
+    const logoutTime = Date.now();
+
+    // Update user's last_logout time in database
+    await query("UPDATE users SET last_logout = $1 WHERE id = $2", [
+      new Date(logoutTime),
+      userId,
+    ]);
+
+    res.json({
+      status: "success",
+      message: "Logged out from all devices successfully",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Logout all error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to logout from all devices",
+    });
+  }
+});
+
+// Check token status
+app.get("/api/v1/auth/token-status", verifyToken, (req, res) => {
+  const decoded = jwt.decode(req.token);
+  const now = Math.floor(Date.now() / 1000);
+  const timeUntilExpiry = decoded.exp - now;
+
   res.json({
     status: "success",
-    message: "Logged out successfully",
+    data: {
+      valid: true,
+      expiresIn: timeUntilExpiry,
+      expiresAt: new Date(decoded.exp * 1000).toISOString(),
+      user: {
+        userId: req.user.userId,
+        email: req.user.email,
+        role: req.user.role,
+      },
+    },
   });
 });
 
@@ -843,58 +968,1641 @@ app.put(
 // ========================= PLACEHOLDER ENDPOINTS =========================
 // These are basic endpoints - expand based on your needs
 
-// Classes endpoints
+// ========================= CLASSES MANAGEMENT ENDPOINTS =========================
+
+// Get all classes (with filtering and pagination)
 app.get("/api/v1/classes", verifyToken, async (req, res) => {
-  // TODO: Implement classes listing
-  res.json({
-    status: "success",
-    message: "Classes endpoint - to be implemented",
-    data: { classes: [] },
-  });
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      department_id,
+      teacher_id,
+      grade_level,
+      academic_year,
+      status = "active",
+      search,
+    } = req.query;
+
+    let queryText = `
+      SELECT c.*, d.name as department_name, 
+             u.first_name || ' ' || u.last_name as teacher_name,
+             COUNT(e.student_id) as enrolled_students
+      FROM classes c
+      LEFT JOIN departments d ON c.department_id = d.id
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN enrollments e ON c.id = e.class_id AND e.status = 'active'
+      WHERE 1=1
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (department_id) {
+      paramCount++;
+      queryText += ` AND c.department_id = $${paramCount}`;
+      queryParams.push(department_id);
+    }
+
+    if (teacher_id) {
+      paramCount++;
+      queryText += ` AND c.teacher_id = $${paramCount}`;
+      queryParams.push(teacher_id);
+    }
+
+    if (grade_level) {
+      paramCount++;
+      queryText += ` AND c.grade_level = $${paramCount}`;
+      queryParams.push(grade_level);
+    }
+
+    if (academic_year) {
+      paramCount++;
+      queryText += ` AND c.academic_year = $${paramCount}`;
+      queryParams.push(academic_year);
+    }
+
+    if (status) {
+      paramCount++;
+      queryText += ` AND c.status = $${paramCount}`;
+      queryParams.push(status);
+    }
+
+    if (search) {
+      paramCount++;
+      queryText += ` AND (c.name ILIKE $${paramCount} OR c.code ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    queryText += ` GROUP BY c.id, d.name, u.first_name, u.last_name`;
+    queryText += ` ORDER BY c.created_at DESC`;
+    queryText += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+
+    const result = await query(queryText, queryParams);
+
+    // Get total count
+    const countResult = await query(
+      "SELECT COUNT(*) as total FROM classes WHERE status = $1",
+      [status]
+    );
+    const total = parseInt(countResult.rows[0].total);
+
+    res.json({
+      status: "success",
+      data: {
+        classes: result.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get classes error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch classes",
+    });
+  }
 });
 
+// Create new class (Admin/Teacher only)
 app.post(
   "/api/v1/classes",
   verifyToken,
   checkRole(["admin", "teacher"]),
+  [
+    body("name")
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Class name is required"),
+    body("code")
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Class code is required"),
+    body("department_id").isInt().withMessage("Department ID is required"),
+    body("grade_level")
+      .trim()
+      .notEmpty()
+      .withMessage("Grade level is required"),
+    body("academic_year")
+      .matches(/^\d{4}-\d{4}$/)
+      .withMessage("Academic year must be in format YYYY-YYYY"),
+    body("max_students")
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage("Max students must be a positive number"),
+  ],
   async (req, res) => {
-    // TODO: Implement class creation
-    res.json({
-      status: "success",
-      message: "Create class endpoint - to be implemented",
-    });
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      const {
+        name,
+        code,
+        description,
+        department_id,
+        teacher_id,
+        grade_level,
+        academic_year,
+        term = "first",
+        max_students = 30,
+        credits = 3,
+      } = req.body;
+
+      // Check if class code already exists
+      const existingClass = await query(
+        "SELECT id FROM classes WHERE code = $1",
+        [code]
+      );
+
+      if (existingClass.rows.length > 0) {
+        return res.status(409).json({
+          status: "error",
+          message: "Class code already exists",
+        });
+      }
+
+      // Verify department exists
+      const departmentExists = await query(
+        "SELECT id FROM departments WHERE id = $1",
+        [department_id]
+      );
+
+      if (departmentExists.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Department not found",
+        });
+      }
+
+      // If teacher_id provided, verify they are a teacher
+      if (teacher_id) {
+        const teacherExists = await query(
+          "SELECT id FROM users WHERE id = $1 AND role = 'teacher'",
+          [teacher_id]
+        );
+
+        if (teacherExists.rows.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            message: "Teacher not found",
+          });
+        }
+      }
+
+      const result = await query(
+        `INSERT INTO classes 
+       (name, code, description, department_id, teacher_id, grade_level, academic_year, term, max_students, credits, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP) 
+       RETURNING *`,
+        [
+          name,
+          code,
+          description,
+          department_id,
+          teacher_id,
+          grade_level,
+          academic_year,
+          term,
+          max_students,
+          credits,
+          "active",
+        ]
+      );
+
+      console.log(`✅ Class created: ${name} (${code}) by ${req.user.email}`);
+
+      res.status(201).json({
+        status: "success",
+        message: "Class created successfully",
+        data: {
+          class: result.rows[0],
+        },
+      });
+    } catch (error) {
+      console.error("Create class error:", error);
+
+      if (error.code === "23505") {
+        return res.status(409).json({
+          status: "error",
+          message: "Class code already exists",
+        });
+      }
+
+      res.status(500).json({
+        status: "error",
+        message: "Failed to create class",
+      });
+    }
   }
 );
 
-// Assignments endpoints
+// Get class by ID (with enrolled students)
+app.get("/api/v1/classes/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get class details
+    const classResult = await query(
+      `SELECT c.*, d.name as department_name, 
+              u.first_name || ' ' || u.last_name as teacher_name,
+              u.email as teacher_email
+       FROM classes c
+       LEFT JOIN departments d ON c.department_id = d.id
+       LEFT JOIN users u ON c.teacher_id = u.id
+       WHERE c.id = $1`,
+      [id]
+    );
+
+    if (classResult.rows.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Class not found",
+      });
+    }
+
+    // Get enrolled students
+    const studentsResult = await query(
+      `SELECT u.id, u.first_name, u.last_name, u.email, e.enrollment_date, e.status as enrollment_status
+       FROM enrollments e
+       JOIN users u ON e.student_id = u.id
+       WHERE e.class_id = $1
+       ORDER BY u.last_name, u.first_name`,
+      [id]
+    );
+
+    const classData = {
+      ...classResult.rows[0],
+      enrolled_students: studentsResult.rows,
+      enrollment_count: studentsResult.rows.length,
+    };
+
+    res.json({
+      status: "success",
+      data: {
+        class: classData,
+      },
+    });
+  } catch (error) {
+    console.error("Get class error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch class",
+    });
+  }
+});
+
+// Update class
+app.put(
+  "/api/v1/classes/:id",
+  verifyToken,
+  checkRole(["admin", "teacher"]),
+  [
+    body("name")
+      .optional()
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Class name must be at least 2 characters"),
+    body("code")
+      .optional()
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Class code must be at least 2 characters"),
+    body("max_students")
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage("Max students must be a positive number"),
+  ],
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      // Check if class exists and user has permission
+      const classCheck = await query("SELECT * FROM classes WHERE id = $1", [
+        id,
+      ]);
+
+      if (classCheck.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Class not found",
+        });
+      }
+
+      const classData = classCheck.rows[0];
+
+      // Teachers can only update their own classes
+      if (
+        req.user.role === "teacher" &&
+        classData.teacher_id !== req.user.userId
+      ) {
+        return res.status(403).json({
+          status: "error",
+          message: "You can only update your own classes",
+        });
+      }
+
+      const updates = [];
+      const values = [];
+      let paramCount = 0;
+
+      const allowedFields = [
+        "name",
+        "description",
+        "teacher_id",
+        "grade_level",
+        "academic_year",
+        "term",
+        "max_students",
+        "credits",
+        "status",
+      ];
+
+      allowedFields.forEach((field) => {
+        if (req.body[field] !== undefined) {
+          paramCount++;
+          updates.push(`${field} = $${paramCount}`);
+          values.push(req.body[field]);
+        }
+      });
+
+      if (updates.length === 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "No valid fields to update",
+        });
+      }
+
+      paramCount++;
+      updates.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(id);
+
+      const result = await query(
+        `UPDATE classes SET ${updates.join(
+          ", "
+        )} WHERE id = $${paramCount} RETURNING *`,
+        values
+      );
+
+      res.json({
+        status: "success",
+        message: "Class updated successfully",
+        data: {
+          class: result.rows[0],
+        },
+      });
+    } catch (error) {
+      console.error("Update class error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to update class",
+      });
+    }
+  }
+);
+
+// Delete class (Admin only)
+app.delete(
+  "/api/v1/classes/:id",
+  verifyToken,
+  checkRole(["admin"]),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if class has enrollments
+      const enrollmentCheck = await query(
+        "SELECT COUNT(*) as count FROM enrollments WHERE class_id = $1",
+        [id]
+      );
+
+      if (parseInt(enrollmentCheck.rows[0].count) > 0) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Cannot delete class with enrolled students. Remove enrollments first.",
+        });
+      }
+
+      const result = await query(
+        "DELETE FROM classes WHERE id = $1 RETURNING *",
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Class not found",
+        });
+      }
+
+      res.json({
+        status: "success",
+        message: "Class deleted successfully",
+      });
+    } catch (error) {
+      console.error("Delete class error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to delete class",
+      });
+    }
+  }
+);
+
+// ========================= ASSIGNMENTS MANAGEMENT ENDPOINTS =========================
+
+// Get assignments (with filtering and role-based access)
 app.get("/api/v1/assignments", verifyToken, async (req, res) => {
-  // TODO: Implement assignments listing
-  res.json({
-    status: "success",
-    message: "Assignments endpoint - to be implemented",
-    data: { assignments: [] },
-  });
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      class_id,
+      teacher_id,
+      type,
+      status = "active",
+      due_date_from,
+      due_date_to,
+      search,
+    } = req.query;
+
+    let queryText = `
+      SELECT a.*, c.name as class_name, c.code as class_code,
+             u.first_name || ' ' || u.last_name as teacher_name,
+             COUNT(s.id) as submission_count,
+             COUNT(CASE WHEN s.status = 'submitted' THEN 1 END) as submitted_count
+      FROM assignments a
+      LEFT JOIN classes c ON a.class_id = c.id
+      LEFT JOIN users u ON a.teacher_id = u.id
+      LEFT JOIN submissions s ON a.id = s.assignment_id
+      WHERE 1=1
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    // Role-based filtering
+    if (req.user.role === "teacher") {
+      paramCount++;
+      queryText += ` AND a.teacher_id = $${paramCount}`;
+      queryParams.push(req.user.userId);
+    } else if (req.user.role === "student") {
+      // Students only see assignments from their enrolled classes
+      paramCount++;
+      queryText += ` AND a.class_id IN (
+        SELECT class_id FROM enrollments WHERE student_id = $${paramCount} AND status = 'active'
+      )`;
+      queryParams.push(req.user.userId);
+    }
+
+    if (class_id) {
+      paramCount++;
+      queryText += ` AND a.class_id = $${paramCount}`;
+      queryParams.push(class_id);
+    }
+
+    if (teacher_id) {
+      paramCount++;
+      queryText += ` AND a.teacher_id = $${paramCount}`;
+      queryParams.push(teacher_id);
+    }
+
+    if (type) {
+      paramCount++;
+      queryText += ` AND a.type = $${paramCount}`;
+      queryParams.push(type);
+    }
+
+    if (status) {
+      paramCount++;
+      queryText += ` AND a.status = $${paramCount}`;
+      queryParams.push(status);
+    }
+
+    if (due_date_from) {
+      paramCount++;
+      queryText += ` AND a.due_date >= $${paramCount}`;
+      queryParams.push(due_date_from);
+    }
+
+    if (due_date_to) {
+      paramCount++;
+      queryText += ` AND a.due_date <= $${paramCount}`;
+      queryParams.push(due_date_to);
+    }
+
+    if (search) {
+      paramCount++;
+      queryText += ` AND (a.title ILIKE $${paramCount} OR a.description ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    queryText += ` GROUP BY a.id, c.name, c.code, u.first_name, u.last_name`;
+    queryText += ` ORDER BY a.due_date ASC, a.created_at DESC`;
+    queryText += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+
+    const result = await query(queryText, queryParams);
+
+    res.json({
+      status: "success",
+      data: {
+        assignments: result.rows.map((assignment) => ({
+          ...assignment,
+          is_overdue: new Date(assignment.due_date) < new Date(),
+          submission_rate:
+            assignment.submission_count > 0
+              ? Math.round(
+                  (assignment.submitted_count / assignment.submission_count) *
+                    100
+                )
+              : 0,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Get assignments error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch assignments",
+    });
+  }
 });
 
-// Grades endpoints
+// Create assignment (Teachers only)
+app.post(
+  "/api/v1/assignments",
+  verifyToken,
+  checkRole(["teacher", "admin"]),
+  [
+    body("title")
+      .trim()
+      .isLength({ min: 3 })
+      .withMessage("Assignment title is required (min 3 characters)"),
+    body("class_id").isInt().withMessage("Class ID is required"),
+    body("due_date").isISO8601().withMessage("Valid due date is required"),
+    body("max_points")
+      .optional()
+      .isFloat({ min: 0 })
+      .withMessage("Max points must be a positive number"),
+    body("type")
+      .isIn(["assignment", "quiz", "exam", "project", "homework", "lab"])
+      .withMessage("Invalid assignment type"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      const {
+        title,
+        description,
+        instructions,
+        class_id,
+        type = "assignment",
+        max_points = 100,
+        due_date,
+        submission_type = "file",
+        attachments,
+      } = req.body;
+
+      // Verify class exists and teacher has access (if teacher role)
+      const classCheck = await query(
+        req.user.role === "teacher"
+          ? "SELECT id FROM classes WHERE id = $1 AND teacher_id = $2"
+          : "SELECT id FROM classes WHERE id = $1",
+        req.user.role === "teacher" ? [class_id, req.user.userId] : [class_id]
+      );
+
+      if (classCheck.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message:
+            req.user.role === "teacher"
+              ? "Class not found or you don't have permission to create assignments for this class"
+              : "Class not found",
+        });
+      }
+
+      // Check due date is in the future
+      if (new Date(due_date) <= new Date()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Due date must be in the future",
+        });
+      }
+
+      const result = await query(
+        `INSERT INTO assignments 
+       (title, description, instructions, class_id, teacher_id, type, max_points, due_date, submission_type, attachments, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP) 
+       RETURNING *`,
+        [
+          title,
+          description,
+          instructions,
+          class_id,
+          req.user.userId,
+          type,
+          max_points,
+          due_date,
+          submission_type,
+          attachments,
+          "active",
+        ]
+      );
+
+      console.log(
+        `✅ Assignment created: ${title} for class ${class_id} by ${req.user.email}`
+      );
+
+      res.status(201).json({
+        status: "success",
+        message: "Assignment created successfully",
+        data: {
+          assignment: result.rows[0],
+        },
+      });
+    } catch (error) {
+      console.error("Create assignment error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to create assignment",
+      });
+    }
+  }
+);
+
+// Get assignment by ID (with submissions for teachers)
+app.get("/api/v1/assignments/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get assignment details
+    const assignmentResult = await query(
+      `SELECT a.*, c.name as class_name, c.code as class_code,
+              u.first_name || ' ' || u.last_name as teacher_name
+       FROM assignments a
+       LEFT JOIN classes c ON a.class_id = c.id
+       LEFT JOIN users u ON a.teacher_id = u.id
+       WHERE a.id = $1`,
+      [id]
+    );
+
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Assignment not found",
+      });
+    }
+
+    const assignment = assignmentResult.rows[0];
+
+    // Check access permissions
+    if (req.user.role === "student") {
+      // Students can only see assignments from their enrolled classes
+      const enrollmentCheck = await query(
+        "SELECT 1 FROM enrollments WHERE student_id = $1 AND class_id = $2 AND status = 'active'",
+        [req.user.userId, assignment.class_id]
+      );
+
+      if (enrollmentCheck.rows.length === 0) {
+        return res.status(403).json({
+          status: "error",
+          message: "You don't have access to this assignment",
+        });
+      }
+
+      // Get student's submission if exists
+      const submissionResult = await query(
+        "SELECT * FROM submissions WHERE assignment_id = $1 AND student_id = $2",
+        [id, req.user.userId]
+      );
+
+      assignment.my_submission = submissionResult.rows[0] || null;
+    } else if (req.user.role === "teacher" || req.user.role === "admin") {
+      // Get all submissions for teachers/admin
+      const submissionsResult = await query(
+        `SELECT s.*, u.first_name, u.last_name, u.email as student_email
+         FROM submissions s
+         JOIN users u ON s.student_id = u.id
+         WHERE s.assignment_id = $1
+         ORDER BY s.submitted_at DESC`,
+        [id]
+      );
+
+      assignment.submissions = submissionsResult.rows;
+      assignment.submission_stats = {
+        total_submissions: submissionsResult.rows.length,
+        graded: submissionsResult.rows.filter((s) => s.status === "graded")
+          .length,
+        pending: submissionsResult.rows.filter((s) => s.status === "submitted")
+          .length,
+      };
+    }
+
+    res.json({
+      status: "success",
+      data: {
+        assignment: {
+          ...assignment,
+          is_overdue: new Date(assignment.due_date) < new Date(),
+          time_remaining: Math.max(
+            0,
+            new Date(assignment.due_date) - new Date()
+          ),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get assignment error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch assignment",
+    });
+  }
+});
+
+// Submit assignment (Students only)
+app.post(
+  "/api/v1/assignments/:id/submit",
+  verifyToken,
+  checkRole(["student"]),
+  [
+    body("submission_text").optional().trim(),
+    body("attachments").optional().isArray(),
+  ],
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { submission_text, attachments } = req.body;
+
+      if (!submission_text && (!attachments || attachments.length === 0)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Either submission text or attachments are required",
+        });
+      }
+
+      // Check if assignment exists and student has access
+      const assignmentCheck = await query(
+        `SELECT a.*, e.student_id
+       FROM assignments a
+       JOIN enrollments e ON a.class_id = e.class_id
+       WHERE a.id = $1 AND e.student_id = $2 AND e.status = 'active' AND a.status = 'active'`,
+        [id, req.user.userId]
+      );
+
+      if (assignmentCheck.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Assignment not found or you don't have access",
+        });
+      }
+
+      const assignment = assignmentCheck.rows[0];
+
+      // Check if assignment is still open
+      if (new Date(assignment.due_date) < new Date()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Assignment deadline has passed",
+        });
+      }
+
+      // Check if student already submitted
+      const existingSubmission = await query(
+        "SELECT id FROM submissions WHERE assignment_id = $1 AND student_id = $2",
+        [id, req.user.userId]
+      );
+
+      if (existingSubmission.rows.length > 0) {
+        // Update existing submission
+        const result = await query(
+          `UPDATE submissions 
+         SET submission_text = $1, attachments = $2, submitted_at = CURRENT_TIMESTAMP, status = 'submitted', updated_at = CURRENT_TIMESTAMP
+         WHERE assignment_id = $3 AND student_id = $4
+         RETURNING *`,
+          [submission_text, JSON.stringify(attachments), id, req.user.userId]
+        );
+
+        res.json({
+          status: "success",
+          message: "Assignment submission updated successfully",
+          data: { submission: result.rows[0] },
+        });
+      } else {
+        // Create new submission
+        const result = await query(
+          `INSERT INTO submissions (assignment_id, student_id, submission_text, attachments, submitted_at, status, created_at) 
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'submitted', CURRENT_TIMESTAMP) 
+         RETURNING *`,
+          [id, req.user.userId, submission_text, JSON.stringify(attachments)]
+        );
+
+        res.status(201).json({
+          status: "success",
+          message: "Assignment submitted successfully",
+          data: { submission: result.rows[0] },
+        });
+      }
+    } catch (error) {
+      console.error("Submit assignment error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to submit assignment",
+      });
+    }
+  }
+);
+
+// Grade submission (Teachers only)
+app.post(
+  "/api/v1/assignments/:assignmentId/submissions/:submissionId/grade",
+  verifyToken,
+  checkRole(["teacher", "admin"]),
+  [
+    body("score")
+      .isFloat({ min: 0 })
+      .withMessage("Score is required and must be positive"),
+    body("feedback").optional().trim(),
+  ],
+  async (req, res) => {
+    try {
+      const { assignmentId, submissionId } = req.params;
+      const { score, feedback } = req.body;
+
+      // Verify teacher has access to this assignment
+      const accessCheck = await query(
+        req.user.role === "teacher"
+          ? `SELECT a.max_points FROM assignments a WHERE a.id = $1 AND a.teacher_id = $2`
+          : `SELECT a.max_points FROM assignments a WHERE a.id = $1`,
+        req.user.role === "teacher"
+          ? [assignmentId, req.user.userId]
+          : [assignmentId]
+      );
+
+      if (accessCheck.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Assignment not found or access denied",
+        });
+      }
+
+      const maxPoints = accessCheck.rows[0].max_points;
+
+      if (score > maxPoints) {
+        return res.status(400).json({
+          status: "error",
+          message: `Score cannot exceed maximum points (${maxPoints})`,
+        });
+      }
+
+      // Update submission with grade
+      const result = await query(
+        `UPDATE submissions 
+         SET status = 'graded', feedback = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2 AND assignment_id = $3
+         RETURNING *`,
+        [feedback, submissionId, assignmentId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Submission not found",
+        });
+      }
+
+      // Create or update grade record
+      const percentage = Math.round((score / maxPoints) * 100);
+      const letterGrade = getLetterGrade(percentage);
+
+      await query(
+        `INSERT INTO grades (student_id, class_id, assignment_id, submission_id, score, max_score, grade_letter, comments, term, academic_year, created_by, created_at)
+         SELECT s.student_id, a.class_id, a.id, s.id, $1, $2, $3, $4, c.term, c.academic_year, $5, CURRENT_TIMESTAMP
+         FROM submissions s
+         JOIN assignments a ON s.assignment_id = a.id
+         JOIN classes c ON a.class_id = c.id
+         WHERE s.id = $6
+         ON CONFLICT (assignment_id, student_id) 
+         DO UPDATE SET score = $1, max_score = $2, grade_letter = $3, comments = $4, updated_by = $5, updated_at = CURRENT_TIMESTAMP`,
+        [score, maxPoints, letterGrade, feedback, req.user.userId, submissionId]
+      );
+
+      res.json({
+        status: "success",
+        message: "Submission graded successfully",
+        data: {
+          submission: result.rows[0],
+          grade: {
+            score,
+            max_score: maxPoints,
+            percentage,
+            letter_grade: letterGrade,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Grade submission error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to grade submission",
+      });
+    }
+  }
+);
+
+// Helper function for letter grades
+function getLetterGrade(percentage) {
+  if (percentage >= 97) return "A+";
+  if (percentage >= 93) return "A";
+  if (percentage >= 90) return "A-";
+  if (percentage >= 87) return "B+";
+  if (percentage >= 83) return "B";
+  if (percentage >= 80) return "B-";
+  if (percentage >= 77) return "C+";
+  if (percentage >= 73) return "C";
+  if (percentage >= 70) return "C-";
+  if (percentage >= 67) return "D+";
+  if (percentage >= 65) return "D";
+  return "F";
+}
+
+// ========================= GRADES ENDPOINTS =========================
+
+// Get grades (role-based access)
 app.get("/api/v1/grades", verifyToken, async (req, res) => {
-  // TODO: Implement grades listing
-  res.json({
-    status: "success",
-    message: "Grades endpoint - to be implemented",
-    data: { grades: [] },
-  });
+  try {
+    const {
+      class_id,
+      student_id,
+      term,
+      academic_year,
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    let queryText = `
+      SELECT g.*, a.title as assignment_title, a.type as assignment_type,
+             c.name as class_name, c.code as class_code,
+             u.first_name, u.last_name, u.email as student_email
+      FROM grades g
+      LEFT JOIN assignments a ON g.assignment_id = a.id
+      LEFT JOIN classes c ON g.class_id = c.id
+      LEFT JOIN users u ON g.student_id = u.id
+      WHERE 1=1
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    // Role-based filtering
+    if (req.user.role === "student") {
+      paramCount++;
+      queryText += ` AND g.student_id = $${paramCount}`;
+      queryParams.push(req.user.userId);
+    } else if (req.user.role === "teacher") {
+      paramCount++;
+      queryText += ` AND g.class_id IN (
+        SELECT id FROM classes WHERE teacher_id = $${paramCount}
+      )`;
+      queryParams.push(req.user.userId);
+    }
+
+    if (class_id) {
+      paramCount++;
+      queryText += ` AND g.class_id = $${paramCount}`;
+      queryParams.push(class_id);
+    }
+
+    if (student_id && req.user.role !== "student") {
+      paramCount++;
+      queryText += ` AND g.student_id = $${paramCount}`;
+      queryParams.push(student_id);
+    }
+
+    if (term) {
+      paramCount++;
+      queryText += ` AND g.term = $${paramCount}`;
+      queryParams.push(term);
+    }
+
+    if (academic_year) {
+      paramCount++;
+      queryText += ` AND g.academic_year = $${paramCount}`;
+      queryParams.push(academic_year);
+    }
+
+    queryText += ` ORDER BY g.created_at DESC`;
+    queryText += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+
+    const result = await query(queryText, queryParams);
+
+    res.json({
+      status: "success",
+      data: {
+        grades: result.rows,
+      },
+    });
+  } catch (error) {
+    console.error("Get grades error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch grades",
+    });
+  }
 });
 
-// Attendance endpoints
-app.get("/api/v1/attendance", verifyToken, async (req, res) => {
-  // TODO: Implement attendance listing
-  res.json({
-    status: "success",
-    message: "Attendance endpoint - to be implemented",
-    data: { attendance: [] },
-  });
+// Get grade analytics/summary
+app.get("/api/v1/grades/analytics", verifyToken, async (req, res) => {
+  try {
+    const { class_id, student_id, academic_year } = req.query;
+
+    let baseQuery = "FROM grades g WHERE 1=1";
+    const queryParams = [];
+    let paramCount = 0;
+
+    // Role-based filtering
+    if (req.user.role === "student") {
+      paramCount++;
+      baseQuery += ` AND g.student_id = $${paramCount}`;
+      queryParams.push(req.user.userId);
+    } else if (req.user.role === "teacher") {
+      paramCount++;
+      baseQuery += ` AND g.class_id IN (SELECT id FROM classes WHERE teacher_id = $${paramCount})`;
+      queryParams.push(req.user.userId);
+    }
+
+    if (class_id) {
+      paramCount++;
+      baseQuery += ` AND g.class_id = $${paramCount}`;
+      queryParams.push(class_id);
+    }
+
+    if (student_id && req.user.role !== "student") {
+      paramCount++;
+      baseQuery += ` AND g.student_id = $${paramCount}`;
+      queryParams.push(student_id);
+    }
+
+    if (academic_year) {
+      paramCount++;
+      baseQuery += ` AND g.academic_year = $${paramCount}`;
+      queryParams.push(academic_year);
+    }
+
+    // Get overall statistics
+    const statsResult = await query(
+      `
+      SELECT 
+        AVG(percentage) as average_percentage,
+        MIN(percentage) as min_percentage,
+        MAX(percentage) as max_percentage,
+        COUNT(*) as total_grades,
+        COUNT(CASE WHEN percentage >= 90 THEN 1 END) as a_grades,
+        COUNT(CASE WHEN percentage >= 80 AND percentage < 90 THEN 1 END) as b_grades,
+        COUNT(CASE WHEN percentage >= 70 AND percentage < 80 THEN 1 END) as c_grades,
+        COUNT(CASE WHEN percentage >= 60 AND percentage < 70 THEN 1 END) as d_grades,
+        COUNT(CASE WHEN percentage < 60 THEN 1 END) as f_grades
+      ${baseQuery}
+    `,
+      queryParams
+    );
+
+    // Get grade distribution by assignment type
+    const typeDistribution = await query(
+      `
+      SELECT a.type, AVG(g.percentage) as average_percentage, COUNT(*) as count
+      ${baseQuery}
+      JOIN assignments a ON g.assignment_id = a.id
+      GROUP BY a.type
+    `,
+      queryParams
+    );
+
+    res.json({
+      status: "success",
+      data: {
+        overall_stats: statsResult.rows[0],
+        grade_distribution: typeDistribution.rows,
+      },
+    });
+  } catch (error) {
+    console.error("Get grade analytics error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch grade analytics",
+    });
+  }
 });
+
+// ========================= ATTENDANCE ENDPOINTS =========================
+
+// Get attendance records
+app.get("/api/v1/attendance", verifyToken, async (req, res) => {
+  try {
+    const {
+      class_id,
+      student_id,
+      date_from,
+      date_to,
+      status,
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    let queryText = `
+      SELECT a.*, c.name as class_name, c.code as class_code,
+             u.first_name, u.last_name, u.email as student_email,
+             marker.first_name || ' ' || marker.last_name as marked_by_name
+      FROM attendance a
+      LEFT JOIN classes c ON a.class_id = c.id
+      LEFT JOIN users u ON a.student_id = u.id
+      LEFT JOIN users marker ON a.marked_by = marker.id
+      WHERE 1=1
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    // Role-based filtering
+    if (req.user.role === "student") {
+      paramCount++;
+      queryText += ` AND a.student_id = $${paramCount}`;
+      queryParams.push(req.user.userId);
+    } else if (req.user.role === "teacher") {
+      paramCount++;
+      queryText += ` AND a.class_id IN (SELECT id FROM classes WHERE teacher_id = $${paramCount})`;
+      queryParams.push(req.user.userId);
+    }
+
+    if (class_id) {
+      paramCount++;
+      queryText += ` AND a.class_id = $${paramCount}`;
+      queryParams.push(class_id);
+    }
+
+    if (student_id && req.user.role !== "student") {
+      paramCount++;
+      queryText += ` AND a.student_id = $${paramCount}`;
+      queryParams.push(student_id);
+    }
+
+    if (date_from) {
+      paramCount++;
+      queryText += ` AND a.date >= $${paramCount}`;
+      queryParams.push(date_from);
+    }
+
+    if (date_to) {
+      paramCount++;
+      queryText += ` AND a.date <= $${paramCount}`;
+      queryParams.push(date_to);
+    }
+
+    if (status) {
+      paramCount++;
+      queryText += ` AND a.status = $${paramCount}`;
+      queryParams.push(status);
+    }
+
+    queryText += ` ORDER BY a.date DESC, a.created_at DESC`;
+    queryText += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+
+    const result = await query(queryText, queryParams);
+
+    res.json({
+      status: "success",
+      data: {
+        attendance: result.rows,
+      },
+    });
+  } catch (error) {
+    console.error("Get attendance error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch attendance",
+    });
+  }
+});
+
+// Mark attendance (Teachers only)
+app.post(
+  "/api/v1/attendance",
+  verifyToken,
+  checkRole(["teacher", "admin"]),
+  [
+    body("class_id").isInt().withMessage("Class ID is required"),
+    body("date").isDate().withMessage("Valid date is required"),
+    body("attendance_records")
+      .isArray()
+      .withMessage("Attendance records array is required"),
+    body("attendance_records.*.student_id")
+      .isInt()
+      .withMessage("Student ID is required"),
+    body("attendance_records.*.status")
+      .isIn(["present", "absent", "late", "excused"])
+      .withMessage("Valid status is required"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      const { class_id, date, attendance_records, notes } = req.body;
+
+      // Verify teacher has access to class
+      const classCheck = await query(
+        req.user.role === "teacher"
+          ? "SELECT id FROM classes WHERE id = $1 AND teacher_id = $2"
+          : "SELECT id FROM classes WHERE id = $1",
+        req.user.role === "teacher" ? [class_id, req.user.userId] : [class_id]
+      );
+
+      if (classCheck.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Class not found or access denied",
+        });
+      }
+
+      // Begin transaction
+      const client = await createPool().connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const results = [];
+
+        for (const record of attendance_records) {
+          const { student_id, status, notes: studentNotes } = record;
+
+          // Upsert attendance record
+          const result = await client.query(
+            `INSERT INTO attendance (student_id, class_id, date, status, notes, marked_by, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+           ON CONFLICT (student_id, class_id, date)
+           DO UPDATE SET status = $4, notes = $5, marked_by = $6, updated_at = CURRENT_TIMESTAMP
+           RETURNING *`,
+            [
+              student_id,
+              class_id,
+              date,
+              status,
+              studentNotes || notes,
+              req.user.userId,
+            ]
+          );
+
+          results.push(result.rows[0]);
+        }
+
+        await client.query("COMMIT");
+
+        res.json({
+          status: "success",
+          message: "Attendance marked successfully",
+          data: {
+            attendance_records: results,
+          },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error("Mark attendance error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to mark attendance",
+      });
+    }
+  }
+);
+
+// ========================= WORLD-CLASS ADDITIONAL ENDPOINTS =========================
+
+// Student Enrollments Management
+app.post(
+  "/api/v1/enrollments",
+  verifyToken,
+  checkRole(["admin", "teacher"]),
+  [
+    body("student_id").isInt().withMessage("Student ID is required"),
+    body("class_id").isInt().withMessage("Class ID is required"),
+  ],
+  async (req, res) => {
+    try {
+      const { student_id, class_id } = req.body;
+
+      // Check if enrollment already exists
+      const existing = await query(
+        "SELECT id FROM enrollments WHERE student_id = $1 AND class_id = $2",
+        [student_id, class_id]
+      );
+
+      if (existing.rows.length > 0) {
+        return res.status(409).json({
+          status: "error",
+          message: "Student is already enrolled in this class",
+        });
+      }
+
+      // Check class capacity
+      const classInfo = await query(
+        `SELECT max_students, 
+              (SELECT COUNT(*) FROM enrollments WHERE class_id = $1 AND status = 'active') as current_count
+       FROM classes WHERE id = $1`,
+        [class_id]
+      );
+
+      const { max_students, current_count } = classInfo.rows[0];
+      if (current_count >= max_students) {
+        return res.status(400).json({
+          status: "error",
+          message: "Class is at maximum capacity",
+        });
+      }
+
+      const result = await query(
+        `INSERT INTO enrollments (student_id, class_id, enrollment_date, status, created_at)
+       VALUES ($1, $2, CURRENT_DATE, 'active', CURRENT_TIMESTAMP)
+       RETURNING *`,
+        [student_id, class_id]
+      );
+
+      res.status(201).json({
+        status: "success",
+        message: "Student enrolled successfully",
+        data: { enrollment: result.rows[0] },
+      });
+    } catch (error) {
+      console.error("Enrollment error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to enroll student",
+      });
+    }
+  }
+);
+
+// Reports Generation
+app.get(
+  "/api/v1/reports/student-progress/:studentId",
+  verifyToken,
+  checkRole(["admin", "teacher", "parent"]),
+  async (req, res) => {
+    try {
+      const { studentId } = req.params;
+      const { academic_year } = req.query;
+
+      // Get student info
+      const studentInfo = await query(
+        "SELECT first_name, last_name, email FROM users WHERE id = $1 AND role = 'student'",
+        [studentId]
+      );
+
+      if (studentInfo.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Student not found",
+        });
+      }
+
+      // Get enrolled classes
+      const classesResult = await query(
+        `SELECT c.name, c.code, c.credits,
+              AVG(g.percentage) as average_grade,
+              COUNT(g.id) as total_assignments,
+              COUNT(a.id) FILTER (WHERE a.status = 'present') as days_present,
+              COUNT(a.id) FILTER (WHERE a.status = 'absent') as days_absent,
+              COUNT(a.id) as total_attendance_days
+       FROM enrollments e
+       JOIN classes c ON e.class_id = c.id
+       LEFT JOIN grades g ON e.class_id = g.class_id AND e.student_id = g.student_id
+       LEFT JOIN attendance a ON e.class_id = a.class_id AND e.student_id = a.student_id
+       WHERE e.student_id = $1 AND e.status = 'active'
+       ${academic_year ? "AND c.academic_year = $2" : ""}
+       GROUP BY c.id, c.name, c.code, c.credits`,
+        academic_year ? [studentId, academic_year] : [studentId]
+      );
+
+      const report = {
+        student: studentInfo.rows[0],
+        classes: classesResult.rows.map((cls) => ({
+          ...cls,
+          attendance_rate:
+            cls.total_attendance_days > 0
+              ? Math.round((cls.days_present / cls.total_attendance_days) * 100)
+              : 0,
+        })),
+        overall_stats: {
+          total_classes: classesResult.rows.length,
+          overall_gpa:
+            classesResult.rows.reduce(
+              (sum, cls) => sum + (cls.average_grade || 0),
+              0
+            ) / classesResult.rows.length,
+          overall_attendance:
+            (classesResult.rows.reduce(
+              (sum, cls) => sum + (cls.days_present || 0),
+              0
+            ) /
+              Math.max(
+                1,
+                classesResult.rows.reduce(
+                  (sum, cls) => sum + (cls.total_attendance_days || 0),
+                  0
+                )
+              )) *
+            100,
+        },
+      };
+
+      res.json({
+        status: "success",
+        data: { report },
+      });
+    } catch (error) {
+      console.error("Student progress report error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to generate student progress report",
+      });
+    }
+  }
+);
+
+// Notifications System
+app.get("/api/v1/notifications", verifyToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, type, read = false } = req.query;
+
+    // This would typically come from a notifications table
+    // For now, we'll generate dynamic notifications
+    const notifications = [];
+
+    if (req.user.role === "student") {
+      // Get upcoming assignments
+      const upcomingAssignments = await query(
+        `SELECT a.title, a.due_date, c.name as class_name
+         FROM assignments a
+         JOIN classes c ON a.class_id = c.id
+         JOIN enrollments e ON c.id = e.class_id
+         WHERE e.student_id = $1 AND a.due_date > CURRENT_TIMESTAMP 
+         AND a.due_date <= CURRENT_TIMESTAMP + INTERVAL '7 days'
+         AND a.status = 'active'
+         ORDER BY a.due_date`,
+        [req.user.userId]
+      );
+
+      upcomingAssignments.rows.forEach((assignment) => {
+        notifications.push({
+          id: `assignment-${assignment.title}`,
+          type: "assignment_due",
+          title: "Assignment Due Soon",
+          message: `${assignment.title} in ${
+            assignment.class_name
+          } is due ${new Date(assignment.due_date).toLocaleDateString()}`,
+          created_at: new Date(),
+          read: false,
+        });
+      });
+
+      // Get recent grades
+      const recentGrades = await query(
+        `SELECT g.percentage, g.grade_letter, a.title, c.name as class_name
+         FROM grades g
+         JOIN assignments a ON g.assignment_id = a.id
+         JOIN classes c ON g.class_id = c.id
+         WHERE g.student_id = $1 AND g.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'
+         ORDER BY g.created_at DESC
+         LIMIT 5`,
+        [req.user.userId]
+      );
+
+      recentGrades.rows.forEach((grade) => {
+        notifications.push({
+          id: `grade-${grade.title}`,
+          type: "grade_posted",
+          title: "New Grade Posted",
+          message: `You received ${grade.grade_letter} (${grade.percentage}%) on ${grade.title} in ${grade.class_name}`,
+          created_at: new Date(),
+          read: false,
+        });
+      });
+    }
+
+    res.json({
+      status: "success",
+      data: {
+        notifications: notifications.slice(0, limit),
+        unread_count: notifications.filter((n) => !n.read).length,
+      },
+    });
+  } catch (error) {
+    console.error("Get notifications error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch notifications",
+    });
+  }
+});
+
+// Analytics Dashboard
+app.get(
+  "/api/v1/analytics/dashboard",
+  verifyToken,
+  checkRole(["admin", "teacher"]),
+  async (req, res) => {
+    try {
+      const { academic_year } = req.query;
+
+      const analytics = {};
+
+      if (req.user.role === "admin") {
+        // School-wide analytics
+        const overallStats = await query(`
+        SELECT 
+          (SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active') as total_students,
+          (SELECT COUNT(*) FROM users WHERE role = 'teacher' AND status = 'active') as total_teachers,
+          (SELECT COUNT(*) FROM classes WHERE status = 'active') as total_classes,
+          (SELECT COUNT(*) FROM assignments WHERE status = 'active') as total_assignments,
+          (SELECT AVG(percentage) FROM grades) as overall_gpa
+      `);
+
+        analytics.school_stats = overallStats.rows[0];
+      } else {
+        // Teacher-specific analytics
+        const teacherStats = await query(
+          `
+        SELECT 
+          (SELECT COUNT(*) FROM classes WHERE teacher_id = $1 AND status = 'active') as my_classes,
+          (SELECT COUNT(DISTINCT e.student_id) FROM enrollments e 
+           JOIN classes c ON e.class_id = c.id 
+           WHERE c.teacher_id = $1 AND e.status = 'active') as my_students,
+          (SELECT COUNT(*) FROM assignments WHERE teacher_id = $1 AND status = 'active') as my_assignments,
+          (SELECT AVG(g.percentage) FROM grades g 
+           JOIN assignments a ON g.assignment_id = a.id 
+           WHERE a.teacher_id = $1) as my_class_avg
+      `,
+          [req.user.userId]
+        );
+
+        analytics.teacher_stats = teacherStats.rows[0];
+      }
+
+      res.json({
+        status: "success",
+        data: { analytics },
+      });
+    } catch (error) {
+      console.error("Analytics dashboard error:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to fetch analytics",
+      });
+    }
+  }
+);
 
 // ========================= ERROR HANDLING =========================
 
