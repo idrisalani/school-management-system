@@ -176,15 +176,23 @@ app.post(
       console.log("✅ Password hashed successfully");
 
       // Insert user
+      // Insert user with guaranteed non-null name
+      const safeName = `${firstName} ${lastName}`; // Direct concatenation
+      console.log("🔍 About to insert:", {
+        username,
+        email: email.toLowerCase(),
+        safeName,
+      });
+
       const result = await query(
         `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
-         RETURNING id, username, email, name, first_name, last_name, role, created_at`,
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
+   RETURNING id, username, email, name, first_name, last_name, role, created_at`,
         [
           username,
           email.toLowerCase(),
           hashedPassword,
-          fullName,
+          safeName, // ← Guaranteed non-null
           firstName,
           lastName,
           role,
