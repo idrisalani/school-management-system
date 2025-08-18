@@ -155,7 +155,7 @@ app.post(
 
       // Hash password with FAST salt rounds for serverless
       console.log("🔐 Hashing password...");
-      const saltRounds = 8; // FAST for serverless
+      const saltRounds = 4; // FAST for serverless
       const hashedPassword = await bcrypt.hash(password, saltRounds);
       console.log("✅ Password hashed successfully");
 
