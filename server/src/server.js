@@ -120,98 +120,158 @@ app.post(
   ],
   async (req, res) => {
     try {
-      console.log("🚀 Registration attempt:", req.body.email);
+      console.log("🚀 RAW REQUEST BODY:", JSON.stringify(req.body));
 
       // Validation
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log("❌ VALIDATION ERRORS:", errors.array());
         return res.status(400).json({
           status: "error",
           message: "Validation failed",
           errors: errors.array(),
+          debug: "Validation step failed",
         });
       }
 
       const { firstName, lastName, email, password, role } = req.body;
 
-      // Create username and name
-      // Create username and name with NULL protection
-      const cleanFirstName = (firstName || "").toString().trim();
-      const cleanLastName = (lastName || "").toString().trim();
-
-      if (!cleanFirstName || !cleanLastName) {
-        return res.status(400).json({
-          status: "error",
-          message: "First name and last name are required and cannot be empty",
-        });
-      }
-
-      const username = `${cleanFirstName.toLowerCase()}.${cleanLastName.toLowerCase()}`;
-      const fullName = `${cleanFirstName} ${cleanLastName}`;
-
-      console.log("🔍 Generated values:", {
-        username,
-        fullName,
-        length: fullName.length,
+      console.log("📝 EXTRACTED VALUES:", {
+        firstName: `"${firstName}"`,
+        lastName: `"${lastName}"`,
+        email: `"${email}"`,
+        role: `"${role}"`,
+        firstNameType: typeof firstName,
+        lastNameType: typeof lastName,
+        firstNameLength: firstName ? firstName.length : "NULL",
+        lastNameLength: lastName ? lastName.length : "NULL",
       });
-      console.log("🔍 Creating user:", { username, email });
+
+      // Create values with extensive logging
+      const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
+      const fullName = `${firstName} ${lastName}`;
+
+      console.log("🔧 GENERATED VALUES:", {
+        username: `"${username}"`,
+        fullName: `"${fullName}"`,
+        fullNameLength: fullName.length,
+        usernameLength: username.length,
+      });
 
       // Check for existing user
+      console.log("🔍 CHECKING FOR EXISTING USER...");
       const existing = await query(
-        "SELECT id FROM users WHERE email = $1 OR username = $2",
+        "SELECT id, email, username FROM users WHERE email = $1 OR username = $2",
         [email.toLowerCase(), username]
       );
+
+      console.log("📊 EXISTING USER CHECK:", {
+        found: existing.rows.length,
+        existingEmails: existing.rows.map((r) => r.email),
+        existingUsernames: existing.rows.map((r) => r.username),
+      });
 
       if (existing.rows.length > 0) {
         return res.status(409).json({
           status: "error",
-          message: "Email or name combination already exists",
+          message: "Email or username already exists",
+          debug: "User already exists",
+          existing: existing.rows[0],
         });
       }
 
-      // Hash password with FAST salt rounds for serverless
-      console.log("🔐 Hashing password...");
-      const saltRounds = 4; // FAST for serverless
+      // Hash password
+      console.log("🔐 STARTING PASSWORD HASH...");
+      const startTime = Date.now();
+      const saltRounds = 4;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
-      console.log("✅ Password hashed successfully");
+      const hashTime = Date.now() - startTime;
+      console.log(
+        `✅ PASSWORD HASHED in ${hashTime}ms, length: ${hashedPassword.length}`
+      );
 
-      // Insert user
-      // Insert user with guaranteed non-null name
-      const safeName = `${firstName} ${lastName}`; // Direct concatenation
-      console.log("🔍 About to insert:", {
-        username,
-        email: email.toLowerCase(),
-        safeName,
+      // Prepare insert values with extreme logging
+      const insertValues = [
+        username, // $1
+        email.toLowerCase(), // $2
+        hashedPassword, // $3
+        fullName, // $4 - THE PROBLEMATIC ONE
+        firstName, // $5
+        lastName, // $6
+        role, // $7
+        false, // $8
+        "active", // $9
+      ];
+
+      console.log("📋 INSERT VALUES DEBUG:", {
+        param1_username: `"${insertValues[0]}" (${typeof insertValues[0]})`,
+        param2_email: `"${insertValues[1]}" (${typeof insertValues[1]})`,
+        param3_password: `"${insertValues[2].substring(
+          0,
+          10
+        )}..." (${typeof insertValues[2]})`,
+        param4_name: `"${insertValues[3]}" (${typeof insertValues[3]}) LENGTH:${
+          insertValues[3]?.length
+        }`,
+        param5_firstName: `"${insertValues[4]}" (${typeof insertValues[4]})`,
+        param6_lastName: `"${insertValues[5]}" (${typeof insertValues[5]})`,
+        param7_role: `"${insertValues[6]}" (${typeof insertValues[6]})`,
+        param8_verified: `${insertValues[7]} (${typeof insertValues[7]})`,
+        param9_status: `"${insertValues[8]}" (${typeof insertValues[8]})`,
       });
 
+      // Check if any critical values are null/undefined
+      const nullChecks = {
+        username_null: insertValues[0] == null,
+        email_null: insertValues[1] == null,
+        password_null: insertValues[2] == null,
+        name_null: insertValues[3] == null,
+        firstName_null: insertValues[4] == null,
+        lastName_null: insertValues[5] == null,
+        role_null: insertValues[6] == null,
+      };
+
+      console.log("🚨 NULL CHECKS:", nullChecks);
+
+      if (nullChecks.name_null) {
+        return res.status(400).json({
+          status: "error",
+          message: "Name value is null before database insert",
+          debug: "Pre-insert null check failed",
+          nullChecks,
+          originalInput: { firstName, lastName, email, role },
+        });
+      }
+
+      // Execute insert
+      console.log("💾 EXECUTING DATABASE INSERT...");
       const result = await query(
         `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
-   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
-   RETURNING id, username, email, name, first_name, last_name, role, created_at`,
-        [
-          username,
-          email.toLowerCase(),
-          hashedPassword,
-          safeName, // ← Guaranteed non-null
-          firstName,
-          lastName,
-          role,
-          false,
-          "active",
-        ]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
+         RETURNING id, username, email, name, first_name, last_name, role, created_at`,
+        insertValues
       );
 
       const user = result.rows[0];
-      console.log("✅ User created:", user.username);
+      console.log("✅ USER CREATED SUCCESSFULLY:", {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        name: user.name,
+      });
 
       // Generate token
+      console.log("🎫 GENERATING JWT TOKEN...");
       const token = jwt.sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET || "fallback-secret",
         { expiresIn: "7d" }
       );
+      console.log("✅ TOKEN GENERATED");
 
-      res.status(201).json({
+      console.log("🎉 REGISTRATION COMPLETED SUCCESSFULLY");
+
+      return res.status(201).json({
         status: "success",
         message: "User registered successfully",
         data: {
@@ -227,14 +287,26 @@ app.post(
           },
           token: token,
         },
+        debug: "Registration completed without errors",
       });
     } catch (error) {
-      console.error("💥 Registration error:", error);
-      res.status(500).json({
+      console.error("💥 REGISTRATION ERROR DETAILS:");
+      console.error("Error message:", error.message);
+      console.error("Error name:", error.name);
+      console.error("Error code:", error.code);
+      console.error("Error detail:", error.detail);
+      console.error("Error constraint:", error.constraint);
+      console.error("Full error:", error);
+
+      return res.status(500).json({
         status: "error",
         message: "Registration failed",
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        error: error.message,
+        errorName: error.name,
+        errorCode: error.code,
+        errorDetail: error.detail,
+        errorConstraint: error.constraint,
+        debug: "Caught in registration catch block",
       });
     }
   }
