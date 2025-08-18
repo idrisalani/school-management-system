@@ -512,6 +512,79 @@ app.get("/api/v1/debug/registration", async (req, res) => {
   }
 });
 
+// Add this simple test endpoint to your server.js to verify everything is working
+
+app.post("/api/v1/test/simple-insert", async (req, res) => {
+  try {
+    console.log("🧪 Simple test insert started");
+
+    // Test basic database connection
+    const timeTest = await query("SELECT NOW() as current_time");
+    console.log(
+      "✅ Database connection test passed:",
+      timeTest.rows[0].current_time
+    );
+
+    // Test simple data insertion with hard-coded safe values
+    const testUsername = `test.user.${Date.now()}`;
+    const testEmail = `test${Date.now()}@example.com`;
+    const testName = "Test User";
+
+    console.log("🔍 Attempting to insert test user:", {
+      username: testUsername,
+      email: testEmail,
+      name: testName,
+    });
+
+    const result = await query(
+      `INSERT INTO users (username, email, password, name, first_name, last_name, role, is_verified, status, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
+       RETURNING id, username, email, name`,
+      [
+        testUsername, // username
+        testEmail, // email
+        "test_password_hash", // password (dummy)
+        testName, // name
+        "Test", // first_name
+        "User", // last_name
+        "student", // role
+        false, // is_verified
+        "active", // status
+      ]
+    );
+
+    console.log("✅ Test user created successfully:", result.rows[0]);
+
+    res.json({
+      status: "success",
+      message: "Simple test insert successful",
+      data: {
+        insertedUser: result.rows[0],
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("💥 Simple test insert failed:", error);
+    console.error("📍 Error details:", {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint,
+    });
+
+    res.status(500).json({
+      status: "error",
+      message: "Simple test insert failed",
+      error: {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      },
+    });
+  }
+});
+
 // Get users - UPDATED to match your existing PostgreSQL schema
 app.get("/api/v1/users", async (req, res) => {
   try {
