@@ -135,9 +135,25 @@ app.post(
       const { firstName, lastName, email, password, role } = req.body;
 
       // Create username and name
-      const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
-      const fullName = `${firstName} ${lastName}`;
+      // Create username and name with NULL protection
+      const cleanFirstName = (firstName || "").toString().trim();
+      const cleanLastName = (lastName || "").toString().trim();
 
+      if (!cleanFirstName || !cleanLastName) {
+        return res.status(400).json({
+          status: "error",
+          message: "First name and last name are required and cannot be empty",
+        });
+      }
+
+      const username = `${cleanFirstName.toLowerCase()}.${cleanLastName.toLowerCase()}`;
+      const fullName = `${cleanFirstName} ${cleanLastName}`;
+
+      console.log("🔍 Generated values:", {
+        username,
+        fullName,
+        length: fullName.length,
+      });
       console.log("🔍 Creating user:", { username, email });
 
       // Check for existing user
