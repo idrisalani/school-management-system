@@ -7,6 +7,9 @@ import jwt from "jsonwebtoken";
 import { body, validationResult } from "express-validator";
 import pkg from "pg";
 
+const debugRoutes = require("./routes/debug.routes.js");
+app.use("/api/v1/debug", debugRoutes);
+
 const { Pool } = pkg;
 
 const app = express();
@@ -459,10 +462,16 @@ app.post(
       console.log("✅ Email and username available, hashing password...");
 
       // Hash password
-      const saltRounds = 12;
+      const saltRounds = 8;
+      console.log("🔐 Starting password hash with salt rounds:", saltRounds);
+      const startTime = Date.now();
       const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-      console.log("✅ Password hashed, creating user...");
+      console.log(
+        "✅ Password hashed in",
+        Date.now() - startTime,
+        "ms",
+        "creating user..."
+      );
       console.log("📊 Final values check:", {
         username: username || "NULL",
         email: email.toLowerCase() || "NULL",
@@ -804,6 +813,196 @@ app.get("/api/v1/users", async (req, res) => {
     });
   }
 });
+
+// Add these test endpoints to isolate the exact problem
+
+// Test 1: Basic server response
+app.get("/api/v1/test/basic", (req, res) => {
+  console.log("✅ Basic test endpoint called");
+  res.json({
+    status: "success",
+    message: "Basic endpoint working",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Test 2: Database connection only
+app.get("/api/v1/test/db-connection", async (req, res) => {
+  try {
+    console.log("🔍 Testing database connection...");
+    const result = await query(
+      "SELECT NOW() as current_time, version() as version"
+    );
+    console.log("✅ Database connection successful");
+
+    res.json({
+      status: "success",
+      message: "Database connection working",
+      data: {
+        currentTime: result.rows[0].current_time,
+        version: result.rows[0].version.substring(0, 50),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Database connection failed",
+      error: error.message,
+    });
+  }
+});
+
+// Test 3: Simple database query
+app.get("/api/v1/test/db-query", async (req, res) => {
+  try {
+    console.log("🔍 Testing database query...");
+    const result = await query("SELECT COUNT(*) as user_count FROM users");
+    console.log("✅ Database query successful");
+
+    res.json({
+      status: "success",
+      message: "Database query working",
+      data: {
+        userCount: result.rows[0].user_count,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Database query failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Database query failed",
+      error: error.message,
+    });
+  }
+});
+
+// Test 4: BCrypt test
+app.post("/api/v1/test/bcrypt", async (req, res) => {
+  try {
+    console.log("🔍 Testing bcrypt...");
+    const testPassword = "testpassword123";
+    const hashed = await bcrypt.hash(testPassword, 10);
+    console.log("✅ BCrypt working");
+
+    res.json({
+      status: "success",
+      message: "BCrypt working",
+      data: {
+        original: testPassword,
+        hashed: hashed.substring(0, 20) + "...",
+      },
+    });
+  } catch (error) {
+    console.error("❌ BCrypt failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "BCrypt failed",
+      error: error.message,
+    });
+  }
+});
+
+// Test 5: JWT test
+app.post("/api/v1/test/jwt", (req, res) => {
+  try {
+    console.log("🔍 Testing JWT...");
+    const testPayload = { userId: 123, email: "test@test.com" };
+    const token = jwt.sign(testPayload, process.env.JWT_SECRET || "fallback", {
+      expiresIn: "1h",
+    });
+    console.log("✅ JWT working");
+
+    res.json({
+      status: "success",
+      message: "JWT working",
+      data: {
+        payload: testPayload,
+        token: token.substring(0, 20) + "...",
+      },
+    });
+  } catch (error) {
+    console.error("❌ JWT failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "JWT failed",
+      error: error.message,
+    });
+  }
+});
+
+// Test 6: Minimal database insert
+app.post("/api/v1/test/minimal-insert", async (req, res) => {
+  try {
+    console.log("🔍 Testing minimal database insert...");
+
+    const testEmail = `test.${Date.now()}@example.com`;
+    const testName = `Test User ${Date.now()}`;
+
+    console.log("📝 Inserting:", { email: testEmail, name: testName });
+
+    const result = await query(
+      "INSERT INTO users (email, name, password, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name",
+      [testEmail, testName, "dummy_password", "student"]
+    );
+
+    console.log("✅ Minimal insert successful:", result.rows[0]);
+
+    res.json({
+      status: "success",
+      message: "Minimal insert working",
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error("❌ Minimal insert failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Minimal insert failed",
+      error: {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      },
+    });
+  }
+});
+
+// Test 7: Express validator test
+app.post(
+  "/api/v1/test/validator",
+  [
+    body("email").isEmail().withMessage("Invalid email"),
+    body("name").isLength({ min: 2 }).withMessage("Name too short"),
+  ],
+  (req, res) => {
+    try {
+      console.log("🔍 Testing express validator...");
+
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      console.log("✅ Express validator working");
+      res.json({
+        status: "success",
+        message: "Express validator working",
+        data: req.body,
+      });
+    } catch (error) {
+      console.error("❌ Express validator failed:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Express validator failed",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
