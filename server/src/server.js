@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { body, validationResult } from "express-validator";
 import pkg from "pg";
+import authRoutes from "./routes/auth.routes.js";
 
 const { Pool } = pkg;
 const app = express();
@@ -109,7 +110,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://school-management-frontend-bay.vercel.app",
+    "https://school-management-frontend-flax.vercel.app",
     process.env.FRONTEND_URL,
     process.env.CORS_ORIGIN,
   ].filter(Boolean),
@@ -135,6 +136,7 @@ app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use("/api/v1/auth", authRoutes);
 
 // ========================= HELPER FUNCTIONS =========================
 const generateToken = (user) => {
@@ -409,6 +411,18 @@ app.post(
   }
 );
 
+app.post("/api/v1/auth/login-test", async (req, res) => {
+  console.log("🧪 Login test route hit!");
+  console.log("Request body:", req.body);
+
+  res.json({
+    status: "success",
+    message: "Login route is accessible!",
+    body_received: req.body,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // AUTH: Login
 app.post(
   "/api/v1/auth/login",
@@ -426,12 +440,15 @@ app.post(
     body("password").notEmpty().withMessage("Password is required"),
   ],
   async (req, res) => {
-    try {
-      console.log("🔑 Login attempt:", {
-        hasEmail: !!req.body.email,
-        hasUsername: !!req.body.username,
-      });
+    console.log("🚀 LOGIN ROUTE HIT - Request received:", {
+      hasEmail: !!req.body.email,
+      hasUsername: !!req.body.username,
+      hasPassword: !!req.body.password,
+      method: req.method,
+      path: req.path,
+    });
 
+    try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -515,6 +532,7 @@ app.post(
         createdAt: user.created_at,
       };
 
+      console.log("✅ Login validation passed");
       console.log("🎉 Login successful for:", userResponse.email);
 
       res.json({
@@ -536,6 +554,22 @@ app.post(
     }
   }
 );
+
+console.log("🔍 AUTH ROUTES REGISTERED:");
+console.log("✅ Registration route: POST /api/v1/auth/register");
+console.log("✅ Login route: POST /api/v1/auth/login");
+console.log("🚀 Server starting with auth routes...");
+
+// Add a test route to verify routing works
+app.get("/api/v1/auth/test", (req, res) => {
+  res.json({
+    status: "success",
+    message: "Auth routes are working!",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+console.log("✅ Test route added: GET /api/v1/auth/test");
 
 // AUTH: Get current user profile
 app.get("/api/v1/auth/me", verifyToken, async (req, res) => {

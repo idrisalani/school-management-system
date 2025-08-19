@@ -134,6 +134,7 @@ const Register = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState(null);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   /** @type {[FormData, React.Dispatch<React.SetStateAction<FormData>>]} */
   const [formData, setFormData] = useState(initialFormData);
@@ -462,7 +463,7 @@ const Register = () => {
       }
 
       console.log("✅ Registration successful:", data);
-      console.log("🎯 New username created:", data.data?.user?.username); // Will show john.smith
+      console.log("🎯 New username created:", data.data?.user?.username);
 
       // Store token if provided in the new response format
       if (data.data?.token) {
@@ -470,10 +471,13 @@ const Register = () => {
         localStorage.setItem("user", JSON.stringify(data.data.user));
       }
 
+      // FIXED: Store email before resetting form data
+      setRegisteredEmail(formData.email); // Store the email before reset
+
       // Success - clear saved form data and show success
       localStorage.removeItem("registrationForm");
-      setShowSuccessModal(true);
-      setFormData(initialFormData);
+      setFormData(initialFormData); // Reset form data
+      setShowSuccessModal(true); // Show modal
     } catch (error) {
       console.error("❌ Registration error:", error);
 
@@ -955,14 +959,23 @@ const Register = () => {
               Registration Successful!
             </h3>
             <p className="text-sm text-gray-600 text-center mb-4">
-              Please check your email at {formData.email} to verify your
+              Please check your email at {registeredEmail} to verify your
               account.
             </p>
             <button
-              onClick={() => navigate("/login")}
+              onClick={() => {
+                setShowSuccessModal(false);
+                setRegisteredEmail(""); // Clear registered email
+                navigate("/login", {
+                  state: {
+                    message: "Registration successful! Please sign in.",
+                    email: registeredEmail,
+                  },
+                });
+              }}
               className="w-full flex justify-center items-center py-2 px-4 border 
-                border-transparent rounded-lg shadow-sm text-sm font-medium 
-                text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200"
+          border-transparent rounded-lg shadow-sm text-sm font-medium 
+          text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200"
             >
               Go to Login
             </button>
