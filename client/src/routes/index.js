@@ -14,6 +14,14 @@ import Register from "../features/auth/Register.jsx";
 import AdminDashboard from "../features/admin/AdminDashboard.jsx";
 import TeacherDashboard from "../features/teacher/TeacherDashboard.jsx";
 import StudentDashboard from "../features/student/StudentDashboard.jsx";
+
+// Import parent components - UPDATED TO USE INDEX EXPORTS
+import {
+  ParentDashboard,
+  ParentProfile,
+  ChildrenOverview,
+} from "../features/parent/index.js";
+
 import UserProfile from "../components/users/UserProfile.jsx";
 import LandingPage from "../features/landing/LandingPage.jsx";
 
@@ -34,6 +42,19 @@ const ProtectedRoute = ({ isAuthenticated, children }) => {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
+};
+
+// Parent Routes Handler - NEW COMPONENT
+const ParentRoutesHandler = () => {
+  return (
+    <Routes>
+      <Route index element={<ParentDashboard />} />
+      <Route path="dashboard" element={<ParentDashboard />} />
+      <Route path="profile" element={<ParentProfile />} />
+      <Route path="children" element={<ChildrenOverview />} />
+      <Route path="*" element={<Navigate to="/parent/dashboard" replace />} />
+    </Routes>
+  );
 };
 
 const AppRoutes = () => {
@@ -127,6 +148,18 @@ const AppRoutes = () => {
           element={
             userRole === "student" ? (
               <StudentDashboard />
+            ) : (
+              <Navigate to="/unauthorized" replace />
+            )
+          }
+        />
+
+        {/* Parent routes - UPDATED WITH SUB-ROUTING */}
+        <Route
+          path="/parent/*"
+          element={
+            userRole === "parent" ? (
+              <ParentRoutesHandler />
             ) : (
               <Navigate to="/unauthorized" replace />
             )
