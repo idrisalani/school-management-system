@@ -37,7 +37,7 @@ import axios from "axios";
 const createApiInstance = () => {
   /** @type {import('axios').AxiosInstance} */
   const instance = axios.create({
-    baseURL: process.env.REACT_APP_API_URL || "/api/v1",
+    baseURL: (process.env.REACT_APP_API_URL || "") + "/api/v1",
     headers: {
       "Content-Type": "application/json",
     },
