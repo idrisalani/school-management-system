@@ -107,7 +107,7 @@ class AuthController {
 
       // Find user by email OR username in PostgreSQL
       const userQuery = await pool.query(
-        "SELECT id, username, first_name, last_name, email, password_hash, role, is_verified, last_login_at FROM users WHERE email = $1 OR username = $1",
+        "SELECT id, username, first_name, last_name, email, password, role, is_verified, last_login_at FROM users WHERE email = $1 OR username = $1",
         [loginIdentifier.toLowerCase()]
       );
 
@@ -122,7 +122,7 @@ class AuthController {
       const user = userQuery.rows[0];
       logger.info("User found:", user.username);
 
-      const isMatch = await bcrypt.compare(password, user.password_hash);
+      const isMatch = await bcrypt.compare(password, user.password);
       logger.info("Password match:", isMatch ? "Yes" : "No");
 
       if (!isMatch) {
@@ -252,7 +252,7 @@ class AuthController {
       // Insert new user with parsed names and generated username
       const insertQuery = `
         INSERT INTO users (
-          username, first_name, last_name, email, password_hash, role, 
+          username, first_name, last_name, email, password, role, 
           is_verified, created_at, updated_at
         ) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
@@ -819,7 +819,7 @@ class AuthController {
 
       // Get current password hash
       const userQuery = await pool.query(
-        "SELECT id, password_hash FROM users WHERE id = $1",
+        "SELECT id, password FROM users WHERE id = $1",
         [userId]
       );
 
@@ -1096,7 +1096,7 @@ class AuthController {
       const { email } = req.params;
 
       const userQuery = await pool.query(
-        "SELECT id, email, is_verified, password_hash FROM users WHERE email = $1",
+        "SELECT id, email, is_verified, password FROM users WHERE email = $1",
         [email.toLowerCase()]
       );
 
