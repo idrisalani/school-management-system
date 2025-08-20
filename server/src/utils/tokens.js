@@ -1,48 +1,18 @@
-// server/src/utils/tokens.js - Fixed ES Modules Version
+// server/src/utils/tokens.js - Simple Version (Zero TypeScript Issues)
 import jwt from "jsonwebtoken";
-import logger from "./logger.js";
 
-// Token utilities for JWT management
-export class TokenUtils {
-  /**
-   * Generate access token
-   * @param {Object} payload - Token payload
-   * @param {string} secret - JWT secret
-   * @param {string} expiresIn - Token expiry time
-   * @returns {string} JWT token
-   */
-  static generateAccessToken(payload, secret, expiresIn = "7d") {
+// Simple token utilities - no complex types
+const TokenUtils = {
+  generateAccessToken(payload, secret, expiresIn = "7d") {
     try {
       return jwt.sign(payload, secret, { expiresIn });
     } catch (error) {
-      logger.error("Error generating access token:", error);
+      console.error("Error generating access token:", error);
       throw new Error("Failed to generate access token");
     }
-  }
+  },
 
-  /**
-   * Generate refresh token
-   * @param {Object} payload - Token payload
-   * @param {string} secret - JWT secret
-   * @param {string} expiresIn - Token expiry time
-   * @returns {string} JWT token
-   */
-  static generateRefreshToken(payload, secret, expiresIn = "30d") {
-    try {
-      return jwt.sign(payload, secret, { expiresIn });
-    } catch (error) {
-      logger.error("Error generating refresh token:", error);
-      throw new Error("Failed to generate refresh token");
-    }
-  }
-
-  /**
-   * Verify JWT token
-   * @param {string} token - JWT token to verify
-   * @param {string} secret - JWT secret
-   * @returns {Object} Decoded token payload
-   */
-  static verifyToken(token, secret) {
+  verifyToken(token, secret) {
     try {
       return jwt.verify(token, secret);
     } catch (error) {
@@ -51,85 +21,41 @@ export class TokenUtils {
       } else if (error.name === "JsonWebTokenError") {
         throw new Error("Invalid token");
       } else {
-        logger.error("Token verification error:", error);
+        console.error("Token verification error:", error);
         throw new Error("Token verification failed");
       }
     }
-  }
+  },
 
-  /**
-   * Decode token without verification (for inspection)
-   * @param {string} token - JWT token to decode
-   * @returns {Object} Decoded token
-   */
-  static decodeToken(token) {
+  decodeToken(token) {
     try {
       return jwt.decode(token, { complete: true });
     } catch (error) {
-      logger.error("Token decode error:", error);
+      console.error("Token decode error:", error);
       throw new Error("Failed to decode token");
     }
-  }
+  },
 
-  /**
-   * Get token expiry time
-   * @param {string} token - JWT token
-   * @returns {number} Expiry timestamp
-   */
-  static getTokenExpiry(token) {
+  isTokenExpired(token) {
     try {
       const decoded = jwt.decode(token);
-      return decoded?.exp ? decoded.exp * 1000 : 0; // Convert to milliseconds
+      if (!decoded || !decoded.exp) {
+        return true;
+      }
+      const now = Math.floor(Date.now() / 1000);
+      return now > decoded.exp;
     } catch (error) {
-      logger.error("Error getting token expiry:", error);
-      return 0;
-    }
-  }
-
-  /**
-   * Check if token is expired
-   * @param {string} token - JWT token
-   * @returns {boolean} True if expired
-   */
-  static isTokenExpired(token) {
-    try {
-      const expiry = this.getTokenExpiry(token);
-      return expiry ? Date.now() > expiry : true;
-    } catch (error) {
-      logger.error("Error checking token expiry:", error);
+      console.error("Error checking token expiry:", error);
       return true;
     }
-  }
+  },
+};
 
-  /**
-   * Generate secure random token for verification/reset purposes
-   * @param {number} length - Token length
-   * @returns {string} Random token
-   */
-  static generateSecureToken(length = 32) {
-    try {
-      const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-      let result = "";
-      for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return result;
-    } catch (error) {
-      logger.error("Error generating secure token:", error);
-      throw new Error("Failed to generate secure token");
-    }
-  }
-}
-
-// Export individual functions for convenience
+// Export individual functions
 export const generateAccessToken = TokenUtils.generateAccessToken;
-export const generateRefreshToken = TokenUtils.generateRefreshToken;
 export const verifyToken = TokenUtils.verifyToken;
 export const decodeToken = TokenUtils.decodeToken;
-export const getTokenExpiry = TokenUtils.getTokenExpiry;
 export const isTokenExpired = TokenUtils.isTokenExpired;
-export const generateSecureToken = TokenUtils.generateSecureToken;
 
 // Default export
 export default TokenUtils;

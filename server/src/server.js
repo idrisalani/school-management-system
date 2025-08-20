@@ -1,12 +1,13 @@
 // @ts-nocheck
 
-// server/src/server.js - Complete School Management System API - FIXED VERSION
+// server/src/server.js - Complete School Management System API
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { body, validationResult } from "express-validator";
 import pkg from "pg";
+import authRoutes from "./routes/auth.routes.js";
 
 const { Pool } = pkg;
 const app = express();
@@ -110,7 +111,6 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:3001",
     "https://school-management-frontend-flax.vercel.app",
-    "https://school-management-system-668kkjtnr-schoolms.vercel.app",
     process.env.FRONTEND_URL,
     process.env.CORS_ORIGIN,
   ].filter(Boolean),
@@ -136,8 +136,7 @@ app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// REMOVED PROBLEMATIC IMPORT: app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", authRoutes);
 
 // ========================= HELPER FUNCTIONS =========================
 const generateToken = (user) => {

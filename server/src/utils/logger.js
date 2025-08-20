@@ -1,111 +1,29 @@
-// @ts-nocheck
+// server/src/utils/logger.js - Simple Serverless Logger
+// Perfect for Vercel/serverless environments
 
-// server/src/utils/logger.js - Fixed ES Modules Version
-import winston from "winston";
-import DailyRotateFile from "winston-daily-rotate-file";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
+const logger = {
+  info: (...args) => {
+    console.log(`[INFO] ${new Date().toISOString()}:`, ...args);
+  },
 
-// Get current directory with ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+  error: (...args) => {
+    console.error(`[ERROR] ${new Date().toISOString()}:`, ...args);
+  },
 
-// Define log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
-};
+  warn: (...args) => {
+    console.warn(`[WARN] ${new Date().toISOString()}:`, ...args);
+  },
 
-// Define colors for each level
-const colors = {
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  http: "magenta",
-  debug: "white",
-};
-
-// Set winston colors
-winston.addColors(colors);
-
-// Define log format
-const format = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss:ms" }),
-  winston.format.errors({ stack: true }),
-  winston.format.metadata({
-    fillExcept: ["message", "level", "timestamp", "stack"],
-  }),
-  winston.format.printf((info) => {
-    let log = `${info.timestamp} ${info.level}: ${info.message}`;
-
-    // Safely check if metadata exists and has properties
-    const metadata =
-      info.metadata && typeof info.metadata === "object" ? info.metadata : {};
-    if (Object.keys(metadata).length > 0) {
-      log += ` ${JSON.stringify(metadata)}`;
+  debug: (...args) => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[DEBUG] ${new Date().toISOString()}:`, ...args);
     }
+  },
 
-    // Add stack trace if available
-    if (info.stack) {
-      log += `\n${info.stack}`;
-    }
-
-    return log;
-  })
-);
-
-// Create logs directory
-const logsDir = path.join(process.cwd(), "logs");
-fs.mkdirSync(logsDir, { recursive: true });
-
-// Define log transports
-const transports = [
-  // Console transport with colors
-  new winston.transports.Console({
-    format: winston.format.combine(winston.format.colorize({ all: true })),
-  }),
-
-  // Error log file with daily rotation
-  new DailyRotateFile({
-    filename: path.join(logsDir, "error-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "error",
-    maxFiles: "30d",
-    maxSize: "20m",
-    zippedArchive: true,
-  }),
-
-  // Combined log file with daily rotation
-  new DailyRotateFile({
-    filename: path.join(logsDir, "combined-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    maxFiles: "30d",
-    maxSize: "20m",
-    zippedArchive: true,
-  }),
-
-  // HTTP requests log file
-  new DailyRotateFile({
-    filename: path.join(logsDir, "http-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "http",
-    maxFiles: "7d",
-    maxSize: "20m",
-    zippedArchive: true,
-  }),
-];
-
-// Create the logger
-const logger = winston.createLogger({
-  level: process.env.NODE_ENV === "development" ? "debug" : "info",
-  levels,
-  format,
-  transports,
-});
+  http: (...args) => {
+    console.log(`[HTTP] ${new Date().toISOString()}:`, ...args);
+  },
+};
 
 // Utility functions with type safety
 export const logUtils = {
