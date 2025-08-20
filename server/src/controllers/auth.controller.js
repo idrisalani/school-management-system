@@ -835,7 +835,7 @@ class AuthController {
       // Verify current password
       const isCurrentPasswordValid = await bcrypt.compare(
         currentPassword,
-        user.password_hash
+        user.password
       );
 
       if (!isCurrentPasswordValid) {
