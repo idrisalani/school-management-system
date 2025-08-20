@@ -107,7 +107,7 @@ class AuthController {
 
       // Find user by email OR username in PostgreSQL
       const userQuery = await pool.query(
-        "SELECT id, username, first_name, last_name, email, password, role, is_verified, last_login_at FROM users WHERE email = $1 OR username = $1",
+        "SELECT id, username, first_name, last_name, email, password, role, is_verified, last_login FROM users WHERE email = $1 OR username = $1",
         [loginIdentifier.toLowerCase()]
       );
 
@@ -146,7 +146,7 @@ class AuthController {
 
       // Update last login
       await pool.query(
-        "UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1",
+        "UPDATE users SET last_login = NOW(), updated_at = NOW() WHERE id = $1",
         [user.id]
       );
 
@@ -504,7 +504,7 @@ class AuthController {
 
       // Update password and clear reset token
       await client.query(
-        "UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL, updated_at = NOW() WHERE id = $2",
+        "UPDATE users SET password = $1, reset_token = NULL, reset_token_expires = NULL, updated_at = NOW() WHERE id = $2",
         [hashedPassword, user.id]
       );
 
