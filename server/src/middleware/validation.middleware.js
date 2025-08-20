@@ -240,22 +240,75 @@ export const validateLogin = async (req, res, next) => {
   }
 };
 
-export const validateRegistration = async (req, res, next) => {
+export const validateRegistration = (req, res, next) => {
   try {
-    console.log("📝 Registration request received:", {
-      body: req.body,
-      headers: req.headers["content-type"],
-    });
+    const { email, password, firstName, lastName, username, name, role } =
+      req.body;
 
-    await registrationSchema.validateAsync(req.body);
-    console.log("✅ Registration validation passed");
+    // ✅ FLEXIBLE NAME HANDLING - Accept either 'name' or 'firstName'+'lastName'
+    let fullName = name;
+    if (!fullName && (firstName || lastName)) {
+      fullName = `${firstName || ""} ${lastName || ""}`.trim();
+    }
+    if (!fullName && username) {
+      fullName = username; // Fallback to username if no other name provided
+    }
+
+    // Validation rules
+    const errors = [];
+
+    // Email validation
+    if (!email) {
+      errors.push({ message: "Email is required", field: "email" });
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push({
+        message: "Please provide a valid email address",
+        field: "email",
+      });
+    }
+
+    // Password validation
+    if (!password) {
+      errors.push({ message: "Password is required", field: "password" });
+    } else if (password.length < 8) {
+      errors.push({
+        message: "Password must be at least 8 characters long",
+        field: "password",
+      });
+    }
+
+    // Name validation (now flexible)
+    if (!fullName) {
+      errors.push({
+        message: "Name is required (provide either name or firstName/lastName)",
+        field: "name",
+      });
+    }
+
+    // Role validation
+    const validRoles = ["student", "teacher", "admin", "parent"];
+    if (role && !validRoles.includes(role)) {
+      errors.push({ message: "Invalid role specified", field: "role" });
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors,
+      });
+    }
+
+    // ✅ ADD COMPUTED NAME TO REQUEST BODY
+    req.body.name = fullName;
+
     next();
   } catch (error) {
-    console.log("❌ Registration validation failed:", {
-      error: error.details,
-      originalError: error.message,
+    logger.error("Validation error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Validation error occurred",
     });
-    next(new ApiError(400, error.details[0].message));
   }
 };
 

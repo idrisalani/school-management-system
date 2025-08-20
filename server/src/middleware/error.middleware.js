@@ -1,5 +1,5 @@
 // server/src/middleware/error.middleware.js
-const logger = require("../utils/logger");
+import logger from "../utils/logger.js";
 
 /**
  * @typedef {Object} MongooseValidationError
@@ -52,7 +52,7 @@ class AppError extends Error {
     super(message);
 
     this.statusCode = statusCode;
-    this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
+    //this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
     this.isOperational = true;
     this.code = undefined;
     this.errors = undefined;
@@ -73,7 +73,7 @@ const createErrorResponse = (err, req, res) => {
 
   const errorResponse = {
     success: false,
-    status: err.status || "error",
+    status: err.statusCode || "error",
     message: err.message || "Something went wrong",
     timestamp: new Date().toISOString(),
     path: req.originalUrl,

@@ -17,7 +17,7 @@ class ApiError extends Error {
     /** @type {number} */
     this.statusCode = statusCode;
     /** @type {string} */
-    this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
+    //this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
     /** @type {boolean} */
     this.isOperational = true;
     /** @type {Object|null} */
@@ -145,7 +145,7 @@ class ApiError extends Error {
    */
   toJSON() {
     const json = {
-      status: this.status,
+      // ✅ REMOVED: status: this.status, (since status property no longer exists)
       statusCode: this.statusCode,
       message: this.message,
     };
