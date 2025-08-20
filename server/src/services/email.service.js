@@ -71,7 +71,7 @@ class EmailService {
         credentials: defaultProvider(),
       });
 
-      this.transport = nodemailer.createTransporter({
+      this.transporter = nodemailer.createTransport({
         SES: { ses: this.ses, aws: { SendEmailCommand } },
         sendingRate: 14, // AWS SES limit per second
       });
@@ -125,7 +125,7 @@ class EmailService {
    * @throws {ApiError}
    */
   async sendEmail(options, attempt = 1) {
-    if (!this.isConfigured || !this.transport) {
+    if (!this.isConfigured || !this.transporter) {
       logger.warn(
         "Email service not configured, email not sent:",
         options.subject
@@ -145,7 +145,7 @@ class EmailService {
         priority: options.priority || "normal",
       };
 
-      await this.transport.sendMail(mailOptions);
+      await this.transporter.sendMail(mailOptions);
       logger.info(`Email sent to ${mailOptions.to}`);
     } catch (error) {
       if (attempt < this.rateLimits.retryAttempts) {
