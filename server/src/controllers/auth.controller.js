@@ -614,7 +614,7 @@ class AuthController {
       }
 
       const userQuery = await pool.query(
-        "SELECT id, username, first_name, last_name, email, role, phone, address, date_of_birth, profile_image_url, is_verified, last_login_at, created_at FROM users WHERE id = $1",
+        "SELECT id, username, first_name, last_name, email, role, phone, address, date_of_birth, profile_image_url, is_verified, last_login, created_at FROM users WHERE id = $1",
         [userId]
       );
 
@@ -642,7 +642,7 @@ class AuthController {
           dateOfBirth: user.date_of_birth,
           profileImageUrl: user.profile_image_url,
           isEmailVerified: user.is_verified,
-          lastLogin: user.last_login_at,
+          lastLogin: user.last_login,
           createdAt: user.created_at,
         },
       });
