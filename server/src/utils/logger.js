@@ -1,10 +1,14 @@
-// server/src/utils/logger.js
-const winston = require("winston");
-const DailyRotateFile = require("winston-daily-rotate-file");
-const path = require("path");
-const fs = require("fs");
+// @ts-nocheck
 
-// Get current directory with CommonJS
+// server/src/utils/logger.js - Fixed ES Modules Version
+import winston from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+// Get current directory with ES modules
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Define log levels
@@ -104,7 +108,7 @@ const logger = winston.createLogger({
 });
 
 // Utility functions with type safety
-const logUtils = {
+export const logUtils = {
   // Format request details with proper type checking
   formatRequest: (req, res, duration) => {
     const formatted = {
@@ -179,7 +183,7 @@ const logUtils = {
 };
 
 // Request logging middleware with error handling
-const requestLogger = (req, res, next) => {
+export const requestLogger = (req, res, next) => {
   const start = Date.now();
 
   // Log request completion
@@ -201,7 +205,7 @@ const requestLogger = (req, res, next) => {
 };
 
 // Error logging middleware with type safety
-const errorLogger = (err, req, res, next) => {
+export const errorLogger = (err, req, res, next) => {
   logger.error("Unhandled Error", {
     ...logUtils.formatError(err),
     request: logUtils.formatRequest(req, res, 0),
@@ -210,7 +214,5 @@ const errorLogger = (err, req, res, next) => {
   next(err);
 };
 
-module.exports = logger;
-module.exports.logUtils = logUtils;
-module.exports.requestLogger = requestLogger;
-module.exports.errorLogger = errorLogger;
+// Default export
+export default logger;

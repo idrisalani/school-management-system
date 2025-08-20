@@ -1,85 +1,135 @@
-// @ts-check
+// server/src/utils/tokens.js - Fixed ES Modules Version
 import jwt from "jsonwebtoken";
-import { ApiError } from "./errors.js";
-import dotenv from "dotenv";
-import logger from "./logger.js"; // Import your logger if available
+import logger from "./logger.js";
 
-// Load environment variables
-dotenv.config();
+// Token utilities for JWT management
+export class TokenUtils {
+  /**
+   * Generate access token
+   * @param {Object} payload - Token payload
+   * @param {string} secret - JWT secret
+   * @param {string} expiresIn - Token expiry time
+   * @returns {string} JWT token
+   */
+  static generateAccessToken(payload, secret, expiresIn = "7d") {
+    try {
+      return jwt.sign(payload, secret, { expiresIn });
+    } catch (error) {
+      logger.error("Error generating access token:", error);
+      throw new Error("Failed to generate access token");
+    }
+  }
 
-// Debug: Log the presence of environment variables
-logger.info("JWT Secrets Check:", {
-  hasVerificationSecret: !!process.env.JWT_VERIFICATION_SECRET,
-  hasResetSecret: !!process.env.JWT_RESET_SECRET,
-});
+  /**
+   * Generate refresh token
+   * @param {Object} payload - Token payload
+   * @param {string} secret - JWT secret
+   * @param {string} expiresIn - Token expiry time
+   * @returns {string} JWT token
+   */
+  static generateRefreshToken(payload, secret, expiresIn = "30d") {
+    try {
+      return jwt.sign(payload, secret, { expiresIn });
+    } catch (error) {
+      logger.error("Error generating refresh token:", error);
+      throw new Error("Failed to generate refresh token");
+    }
+  }
 
-// Validate required environment variables with better error messages
-const JWT_VERIFICATION_SECRET = process.env.JWT_VERIFICATION_SECRET;
-const JWT_RESET_SECRET = process.env.JWT_RESET_SECRET;
+  /**
+   * Verify JWT token
+   * @param {string} token - JWT token to verify
+   * @param {string} secret - JWT secret
+   * @returns {Object} Decoded token payload
+   */
+  static verifyToken(token, secret) {
+    try {
+      return jwt.verify(token, secret);
+    } catch (error) {
+      if (error.name === "TokenExpiredError") {
+        throw new Error("Token has expired");
+      } else if (error.name === "JsonWebTokenError") {
+        throw new Error("Invalid token");
+      } else {
+        logger.error("Token verification error:", error);
+        throw new Error("Token verification failed");
+      }
+    }
+  }
 
-if (!JWT_VERIFICATION_SECRET || !JWT_RESET_SECRET) {
-  const missingSecrets = [];
-  if (!JWT_VERIFICATION_SECRET) missingSecrets.push("JWT_VERIFICATION_SECRET");
-  if (!JWT_RESET_SECRET) missingSecrets.push("JWT_RESET_SECRET");
+  /**
+   * Decode token without verification (for inspection)
+   * @param {string} token - JWT token to decode
+   * @returns {Object} Decoded token
+   */
+  static decodeToken(token) {
+    try {
+      return jwt.decode(token, { complete: true });
+    } catch (error) {
+      logger.error("Token decode error:", error);
+      throw new Error("Failed to decode token");
+    }
+  }
 
-  throw new Error(`Missing required JWT secrets: ${missingSecrets.join(", ")}`);
+  /**
+   * Get token expiry time
+   * @param {string} token - JWT token
+   * @returns {number} Expiry timestamp
+   */
+  static getTokenExpiry(token) {
+    try {
+      const decoded = jwt.decode(token);
+      return decoded?.exp ? decoded.exp * 1000 : 0; // Convert to milliseconds
+    } catch (error) {
+      logger.error("Error getting token expiry:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Check if token is expired
+   * @param {string} token - JWT token
+   * @returns {boolean} True if expired
+   */
+  static isTokenExpired(token) {
+    try {
+      const expiry = this.getTokenExpiry(token);
+      return expiry ? Date.now() > expiry : true;
+    } catch (error) {
+      logger.error("Error checking token expiry:", error);
+      return true;
+    }
+  }
+
+  /**
+   * Generate secure random token for verification/reset purposes
+   * @param {number} length - Token length
+   * @returns {string} Random token
+   */
+  static generateSecureToken(length = 32) {
+    try {
+      const chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      let result = "";
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    } catch (error) {
+      logger.error("Error generating secure token:", error);
+      throw new Error("Failed to generate secure token");
+    }
+  }
 }
 
-/**
- * Generate a verification token
- * @param {string} userId - User ID
- * @returns {string} Verification token
- * @throws {ApiError} If userId is missing
- */
-export const generateVerificationToken = (userId) => {
-  if (!userId) {
-    throw new ApiError(400, "User ID is required");
-  }
+// Export individual functions for convenience
+export const generateAccessToken = TokenUtils.generateAccessToken;
+export const generateRefreshToken = TokenUtils.generateRefreshToken;
+export const verifyToken = TokenUtils.verifyToken;
+export const decodeToken = TokenUtils.decodeToken;
+export const getTokenExpiry = TokenUtils.getTokenExpiry;
+export const isTokenExpired = TokenUtils.isTokenExpired;
+export const generateSecureToken = TokenUtils.generateSecureToken;
 
-  try {
-    return jwt.sign({ userId }, JWT_VERIFICATION_SECRET, {
-      expiresIn: process.env.JWT_VERIFICATION_EXPIRES_IN || "24h",
-    });
-  } catch (error) {
-    logger.error("Error generating verification token:", error);
-    throw new ApiError(500, "Failed to generate verification token");
-  }
-};
-
-/**
- * Generate a password reset token
- * @param {string} userId - User ID
- * @returns {string} Reset token
- * @throws {ApiError} If userId is missing
- */
-export const generateResetToken = (userId) => {
-  if (!userId) {
-    throw new ApiError(400, "User ID is required");
-  }
-
-  try {
-    return jwt.sign({ userId }, JWT_RESET_SECRET, {
-      expiresIn: process.env.JWT_RESET_EXPIRES_IN || "1h",
-    });
-  } catch (error) {
-    logger.error("Error generating reset token:", error);
-    throw new ApiError(500, "Failed to generate reset token");
-  }
-};
-
-// Add verification functions
-export const verifyVerificationToken = (token) => {
-  try {
-    return jwt.verify(token, JWT_VERIFICATION_SECRET);
-  } catch (error) {
-    throw new ApiError(401, "Invalid or expired verification token");
-  }
-};
-
-export const verifyResetToken = (token) => {
-  try {
-    return jwt.verify(token, JWT_RESET_SECRET);
-  } catch (error) {
-    throw new ApiError(401, "Invalid or expired reset token");
-  }
-};
+// Default export
+export default TokenUtils;
