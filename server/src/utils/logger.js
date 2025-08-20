@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-// server/src/utils/logger.js - Fixed ES Modules Version
+// server/src/utils/logger.js - Serverless-Compatible Version (Preserving Your Code)
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 import path from "path";
@@ -10,6 +10,13 @@ import { fileURLToPath } from "url";
 // Get current directory with ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 🔧 SERVERLESS DETECTION - Added for Vercel compatibility
+const isServerless =
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NETLIFY;
+const isProduction = process.env.NODE_ENV === "production";
 
 // Define log levels
 const levels = {
@@ -58,46 +65,82 @@ const format = winston.format.combine(
   })
 );
 
-// Create logs directory
-const logsDir = path.join(process.cwd(), "logs");
-fs.mkdirSync(logsDir, { recursive: true });
+// 🔧 CONDITIONAL DIRECTORY CREATION - Only in non-serverless environments
+let logsDir = null;
+if (!isServerless) {
+  try {
+    logsDir = path.join(process.cwd(), "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    console.log("✅ Logs directory created for local development");
+  } catch (error) {
+    console.warn("⚠️ Failed to create logs directory:", error.message);
+  }
+}
 
-// Define log transports
+// 🔧 CONDITIONAL TRANSPORTS - Different for serverless vs local
 const transports = [
-  // Console transport with colors
+  // Console transport with colors (ALWAYS available)
   new winston.transports.Console({
-    format: winston.format.combine(winston.format.colorize({ all: true })),
-  }),
-
-  // Error log file with daily rotation
-  new DailyRotateFile({
-    filename: path.join(logsDir, "error-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "error",
-    maxFiles: "30d",
-    maxSize: "20m",
-    zippedArchive: true,
-  }),
-
-  // Combined log file with daily rotation
-  new DailyRotateFile({
-    filename: path.join(logsDir, "combined-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    maxFiles: "30d",
-    maxSize: "20m",
-    zippedArchive: true,
-  }),
-
-  // HTTP requests log file
-  new DailyRotateFile({
-    filename: path.join(logsDir, "http-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "http",
-    maxFiles: "7d",
-    maxSize: "20m",
-    zippedArchive: true,
+    format: winston.format.combine(
+      winston.format.colorize({ all: true }),
+      // Enhanced format for serverless environments
+      isServerless
+        ? winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.printf((info) => {
+              return `[${info.timestamp}] ${info.level}: ${info.message}`;
+            })
+          )
+        : winston.format.simple()
+    ),
   }),
 ];
+
+// 🔧 FILE TRANSPORTS - Only add in non-serverless environments
+if (!isServerless && logsDir) {
+  try {
+    // Error log file with daily rotation
+    transports.push(
+      new DailyRotateFile({
+        filename: path.join(logsDir, "error-%DATE%.log"),
+        datePattern: "YYYY-MM-DD",
+        level: "error",
+        maxFiles: "30d",
+        maxSize: "20m",
+        zippedArchive: true,
+      })
+    );
+
+    // Combined log file with daily rotation
+    transports.push(
+      new DailyRotateFile({
+        filename: path.join(logsDir, "combined-%DATE%.log"),
+        datePattern: "YYYY-MM-DD",
+        maxFiles: "30d",
+        maxSize: "20m",
+        zippedArchive: true,
+      })
+    );
+
+    // HTTP requests log file
+    transports.push(
+      new DailyRotateFile({
+        filename: path.join(logsDir, "http-%DATE%.log"),
+        datePattern: "YYYY-MM-DD",
+        level: "http",
+        maxFiles: "7d",
+        maxSize: "20m",
+        zippedArchive: true,
+      })
+    );
+
+    console.log("✅ File logging transports added for local development");
+  } catch (error) {
+    console.warn("⚠️ Failed to set up file logging:", error.message);
+  }
+} else if (isServerless) {
+  console.log("🚀 Serverless environment detected - console logging only");
+}
 
 // Create the logger
 const logger = winston.createLogger({
@@ -105,9 +148,24 @@ const logger = winston.createLogger({
   levels,
   format,
   transports,
+  // 🔧 SERVERLESS OPTIMIZATION - Don't exit on error in serverless
+  exitOnError: !isServerless,
 });
 
-// Utility functions with type safety
+// 🔧 STARTUP LOG - Environment awareness
+if (isServerless) {
+  logger.info("🚀 Logger initialized for serverless environment", {
+    platform: process.env.VERCEL ? "Vercel" : "Other Serverless",
+    transports: ["Console"],
+  });
+} else {
+  logger.info("💻 Logger initialized for local development", {
+    transports: transports.map((t) => t.constructor.name),
+    logsDirectory: logsDir,
+  });
+}
+
+// Utility functions with type safety (PRESERVED FROM YOUR CODE)
 export const logUtils = {
   // Format request details with proper type checking
   formatRequest: (req, res, duration) => {
@@ -155,6 +213,7 @@ export const logUtils = {
       port: Number(port),
       environment: process.env.NODE_ENV || "development",
       nodeVersion: process.version,
+      serverless: isServerless,
     });
   },
 
@@ -182,7 +241,7 @@ export const logUtils = {
   },
 };
 
-// Request logging middleware with error handling
+// Request logging middleware with error handling (PRESERVED FROM YOUR CODE)
 export const requestLogger = (req, res, next) => {
   const start = Date.now();
 
@@ -204,7 +263,7 @@ export const requestLogger = (req, res, next) => {
   next();
 };
 
-// Error logging middleware with type safety
+// Error logging middleware with type safety (PRESERVED FROM YOUR CODE)
 export const errorLogger = (err, req, res, next) => {
   logger.error("Unhandled Error", {
     ...logUtils.formatError(err),
