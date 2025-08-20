@@ -1,4 +1,4 @@
-// server/src/utils/tokens.js - Fixed ES Modules Version
+// server/src/utils/tokens.js - Fixed with Missing Functions
 import jwt from "jsonwebtoken";
 import logger from "./logger.js";
 
@@ -118,6 +118,91 @@ export class TokenUtils {
     } catch (error) {
       logger.error("Error generating secure token:", error);
       throw new Error("Failed to generate secure token");
+    }
+  }
+}
+
+// ✅ MISSING FUNCTIONS - Added these to fix the import errors
+/**
+ * Generate password reset token
+ * @param {string} userId - User ID
+ * @returns {string} JWT reset token
+ */
+export function generateResetToken(userId) {
+  try {
+    const resetSecret = process.env.JWT_RESET_SECRET;
+    if (!resetSecret) {
+      throw new Error("JWT_RESET_SECRET not configured");
+    }
+    return jwt.sign({ userId }, resetSecret, { expiresIn: "1h" });
+  } catch (error) {
+    logger.error("Error generating reset token:", error);
+    throw new Error("Failed to generate reset token");
+  }
+}
+
+/**
+ * Generate email verification token
+ * @param {string} userId - User ID
+ * @returns {string} JWT verification token
+ */
+export function generateVerificationToken(userId) {
+  try {
+    const verificationSecret = process.env.JWT_VERIFICATION_SECRET;
+    if (!verificationSecret) {
+      throw new Error("JWT_VERIFICATION_SECRET not configured");
+    }
+    return jwt.sign({ userId }, verificationSecret, { expiresIn: "24h" });
+  } catch (error) {
+    logger.error("Error generating verification token:", error);
+    throw new Error("Failed to generate verification token");
+  }
+}
+
+/**
+ * Verify password reset token
+ * @param {string} token - Reset token
+ * @returns {Object} Decoded token payload
+ */
+export function verifyResetToken(token) {
+  try {
+    const resetSecret = process.env.JWT_RESET_SECRET;
+    if (!resetSecret) {
+      throw new Error("JWT_RESET_SECRET not configured");
+    }
+    return jwt.verify(token, resetSecret);
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      throw new Error("Reset token has expired");
+    } else if (error.name === "JsonWebTokenError") {
+      throw new Error("Invalid reset token");
+    } else {
+      logger.error("Reset token verification error:", error);
+      throw new Error("Reset token verification failed");
+    }
+  }
+}
+
+/**
+ * Verify email verification token
+ * @param {string} token - Verification token
+ * @returns {Object} Decoded token payload
+ */
+export function verifyVerificationToken(token) {
+  try {
+    const verificationSecret = process.env.JWT_VERIFICATION_SECRET;
+    if (!verificationSecret) {
+      throw new Error("JWT_VERIFICATION_SECRET not configured");
+    }
+    return jwt.verify(token, verificationSecret);
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      throw new Error("Verification token has expired");
+    } else if (error.name === "JsonWebTokenError") {
+      throw new Error("Invalid verification token");
+    } else {
+      logger.error("Verification token error:", error);
+      throw new Error("Verification token verification failed");
     }
   }
 }
