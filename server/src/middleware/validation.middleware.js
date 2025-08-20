@@ -146,18 +146,17 @@ export const validatePayment = async (req, res, next) => {
 
 // Authentication schemas
 const loginSchema = Joi.object({
-  email: Joi.string().email().required().messages({
-    "string.email": "Please enter a valid email address",
-    "any.required": "Email is required",
-  }),
-  username: Joi.string().min(3).optional().messages({
-    "string.min": "Username must be at least 3 characters long",
+  email: Joi.string().min(3).required().messages({
+    "string.min": "Email or username must be at least 3 characters long",
+    "any.required": "Email or username is required",
+    "string.empty": "Email or username cannot be empty",
   }),
   password: Joi.string().min(8).required().messages({
     "string.min": "Password must be at least 8 characters long",
     "any.required": "Password is required",
+    "string.empty": "Password cannot be empty",
   }),
-}).xor("email", "username"); // Either email or username is required
+}); // Either email or username is required
 
 const registrationSchema = Joi.object({
   // Name validation
@@ -233,10 +232,23 @@ const passwordResetSchema = Joi.object({
 
 export const validateLogin = async (req, res, next) => {
   try {
+    // First, validate the basic structure
     await loginSchema.validateAsync(req.body);
+
+    const { email, password } = req.body;
+
+    // Additional validation for email format (only if it contains @)
+    if (email.includes("@")) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return next(new ApiError(400, "Please enter a valid email address"));
+      }
+    }
+
     next();
   } catch (error) {
-    next(new ApiError(400, error.details[0].message));
+    const errorMessage = error.details?.[0]?.message || "Validation failed";
+    next(new ApiError(400, errorMessage));
   }
 };
 
