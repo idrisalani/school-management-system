@@ -101,7 +101,6 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://school-management-system-668kkjtnr-schoolms.vercel.app",
     "https://school-management-frontend-flax.vercel.app",
     process.env.CLIENT_URL,
     process.env.FRONTEND_URL,
