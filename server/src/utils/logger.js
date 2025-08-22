@@ -1,173 +1,137 @@
-// @ts-nocheck
+// server/src/utils/logger.js - Hybrid Serverless Logger (Best of Both Approaches)
+import dotenv from "dotenv";
 
-// server/src/utils/logger.js - Serverless-Compatible Version (Preserving Your Code)
-import winston from "winston";
-import DailyRotateFile from "winston-daily-rotate-file";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
+dotenv.config();
 
-// Get current directory with ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 🔧 SERVERLESS DETECTION - Added for Vercel compatibility
+// 🚀 Environment detection
+const isDevelopment = process.env.NODE_ENV === "development";
+const isProduction = process.env.NODE_ENV === "production";
 const isServerless =
   process.env.VERCEL ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
   process.env.NETLIFY;
-const isProduction = process.env.NODE_ENV === "production";
 
-// Define log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
+/**
+ * Log levels (from Simple Logger - ✅ KEPT)
+ */
+const LOG_LEVELS = {
+  ERROR: 0,
+  WARN: 1,
+  INFO: 2,
+  HTTP: 3, // Added for request logging
+  DEBUG: 4,
 };
 
-// Define colors for each level
+/**
+ * Current log level based on environment (from Simple Logger - ✅ KEPT)
+ */
+const currentLogLevel = process.env.LOG_LEVEL
+  ? LOG_LEVELS[process.env.LOG_LEVEL.toUpperCase()]
+  : isDevelopment
+  ? LOG_LEVELS.DEBUG
+  : LOG_LEVELS.INFO;
+
+/**
+ * Color codes for console output (from Simple Logger - ✅ KEPT + ENHANCED)
+ */
 const colors = {
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  http: "magenta",
-  debug: "white",
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  green: "\x1b[32m",
+  cyan: "\x1b[36m",
+  magenta: "\x1b[35m",
+  gray: "\x1b[90m",
 };
 
-// Set winston colors
-winston.addColors(colors);
+/**
+ * Format timestamp (from Simple Logger - ✅ KEPT)
+ */
+const getTimestamp = () => {
+  return new Date().toISOString();
+};
 
-// Define log format
-const format = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss:ms" }),
-  winston.format.errors({ stack: true }),
-  winston.format.metadata({
-    fillExcept: ["message", "level", "timestamp", "stack"],
-  }),
-  winston.format.printf((info) => {
-    let log = `${info.timestamp} ${info.level}: ${info.message}`;
-
-    // Safely check if metadata exists and has properties
-    const metadata =
-      info.metadata && typeof info.metadata === "object" ? info.metadata : {};
-    if (Object.keys(metadata).length > 0) {
-      log += ` ${JSON.stringify(metadata)}`;
-    }
-
-    // Add stack trace if available
-    if (info.stack) {
-      log += `\n${info.stack}`;
-    }
-
-    return log;
-  })
-);
-
-// 🔧 CONDITIONAL DIRECTORY CREATION - Only in non-serverless environments
-let logsDir = null;
-if (!isServerless) {
-  try {
-    logsDir = path.join(process.cwd(), "logs");
-    fs.mkdirSync(logsDir, { recursive: true });
-    console.log("✅ Logs directory created for local development");
-  } catch (error) {
-    console.warn("⚠️ Failed to create logs directory:", error.message);
+/**
+ * Get color for log level (from Simple Logger - ✅ KEPT + ENHANCED)
+ */
+const getColor = (level) => {
+  switch (level.toLowerCase()) {
+    case "error":
+      return colors.red;
+    case "warn":
+      return colors.yellow;
+    case "info":
+      return colors.blue;
+    case "http":
+      return colors.magenta; // Added
+    case "debug":
+      return colors.cyan;
+    default:
+      return colors.reset;
   }
-}
+};
 
-// 🔧 CONDITIONAL TRANSPORTS - Different for serverless vs local
-const transports = [
-  // Console transport with colors (ALWAYS available)
-  new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize({ all: true }),
-      // Enhanced format for serverless environments
-      isServerless
-        ? winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.printf((info) => {
-              return `[${info.timestamp}] ${info.level}: ${info.message}`;
-            })
-          )
-        : winston.format.simple()
-    ),
-  }),
-];
+/**
+ * Enhanced format message with structured logging (HYBRID APPROACH)
+ */
+const formatMessage = (level, message, meta = {}) => {
+  const timestamp = getTimestamp();
 
-// 🔧 FILE TRANSPORTS - Only add in non-serverless environments
-if (!isServerless && logsDir) {
-  try {
-    // Error log file with daily rotation
-    transports.push(
-      new DailyRotateFile({
-        filename: path.join(logsDir, "error-%DATE%.log"),
-        datePattern: "YYYY-MM-DD",
-        level: "error",
-        maxFiles: "30d",
-        maxSize: "20m",
-        zippedArchive: true,
-      })
-    );
-
-    // Combined log file with daily rotation
-    transports.push(
-      new DailyRotateFile({
-        filename: path.join(logsDir, "combined-%DATE%.log"),
-        datePattern: "YYYY-MM-DD",
-        maxFiles: "30d",
-        maxSize: "20m",
-        zippedArchive: true,
-      })
-    );
-
-    // HTTP requests log file
-    transports.push(
-      new DailyRotateFile({
-        filename: path.join(logsDir, "http-%DATE%.log"),
-        datePattern: "YYYY-MM-DD",
-        level: "http",
-        maxFiles: "7d",
-        maxSize: "20m",
-        zippedArchive: true,
-      })
-    );
-
-    console.log("✅ File logging transports added for local development");
-  } catch (error) {
-    console.warn("⚠️ Failed to set up file logging:", error.message);
+  // For serverless/production: structured JSON logging
+  if (isServerless || isProduction) {
+    return JSON.stringify({
+      timestamp,
+      level: level.toUpperCase(),
+      message,
+      ...meta,
+      environment: process.env.NODE_ENV,
+      serverless: isServerless,
+    });
   }
-} else if (isServerless) {
-  console.log("🚀 Serverless environment detected - console logging only");
-}
 
-// Create the logger
-const logger = winston.createLogger({
-  level: process.env.NODE_ENV === "development" ? "debug" : "info",
-  levels,
-  format,
-  transports,
-  // 🔧 SERVERLESS OPTIMIZATION - Don't exit on error in serverless
-  exitOnError: !isServerless,
-});
+  // For development: human-readable with colors
+  const metaString =
+    Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta, null, 2)}` : "";
+  return `[${timestamp}] ${level.toUpperCase()}: ${message}${metaString}`;
+};
 
-// 🔧 STARTUP LOG - Environment awareness
-if (isServerless) {
-  logger.info("🚀 Logger initialized for serverless environment", {
-    platform: process.env.VERCEL ? "Vercel" : "Other Serverless",
-    transports: ["Console"],
-  });
-} else {
-  logger.info("💻 Logger initialized for local development", {
-    transports: transports.map((t) => t.constructor.name),
-    logsDirectory: logsDir,
-  });
-}
+/**
+ * Core log function (from Simple Logger - ✅ ENHANCED)
+ */
+const log = (level, message, meta = {}) => {
+  const levelValue = LOG_LEVELS[level.toUpperCase()];
 
-// Utility functions with type safety (PRESERVED FROM YOUR CODE)
+  // Check if this log level should be output
+  if (levelValue > currentLogLevel) {
+    return;
+  }
+
+  const color = getColor(level);
+  const formattedMessage = formatMessage(level, message, meta);
+
+  // Output with appropriate formatting
+  if (isDevelopment && !isServerless) {
+    // Development: colorful console output
+    console.log(`${color}${formattedMessage}${colors.reset}`);
+  } else {
+    // Production/Serverless: structured logging
+    console.log(formattedMessage);
+  }
+
+  // Always write errors to stderr in production
+  if (level.toLowerCase() === "error") {
+    console.error(formattedMessage);
+  }
+};
+
+/**
+ * 🆕 ADDED: Utility functions from Complex Logger (Serverless-Optimized)
+ */
 export const logUtils = {
-  // Format request details with proper type checking
+  /**
+   * Format request details (from Complex Logger - ✅ ADAPTED)
+   */
   formatRequest: (req, res, duration) => {
     const formatted = {
       method: req.method,
@@ -175,7 +139,7 @@ export const logUtils = {
       status: res.statusCode,
       duration: `${duration}ms`,
       userAgent: req.get("user-agent"),
-      ip: req.ip,
+      ip: req.ip || req.connection?.remoteAddress || "unknown",
     };
 
     // Safely add user ID if available
@@ -183,23 +147,33 @@ export const logUtils = {
       formatted.userId = req.user.id;
     }
 
+    // Add request body size if available
+    if (req.get("content-length")) {
+      formatted.requestSize = req.get("content-length");
+    }
+
     return formatted;
   },
 
-  // Format error details with type safety
+  /**
+   * Format error details (from Complex Logger - ✅ ENHANCED)
+   */
   formatError: (error, context = {}) => {
     const formatted = {
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: error instanceof Error ? error.message : String(error),
       timestamp: new Date().toISOString(),
+      type: error instanceof Error ? error.name : "Unknown",
     };
 
-    // Safely add error properties
+    // Add error properties safely
     if (error instanceof Error) {
       if (error.stack) formatted.stack = error.stack;
       if ("code" in error) formatted.code = error.code;
+      if ("status" in error) formatted.status = error.status;
+      if ("statusCode" in error) formatted.statusCode = error.statusCode;
     }
 
-    // Safely add context if it's an object
+    // Add context safely
     if (context && typeof context === "object") {
       formatted.context = context;
     }
@@ -207,54 +181,175 @@ export const logUtils = {
     return formatted;
   },
 
-  // Application lifecycle logs
-  logStartup: (port) => {
-    logger.info("Server starting up", {
-      port: Number(port),
-      environment: process.env.NODE_ENV || "development",
-      nodeVersion: process.version,
-      serverless: isServerless,
-    });
-  },
-
-  logShutdown: () => {
-    logger.info("Server shutting down gracefully");
-  },
-
-  // Database logs
+  /**
+   * Database connection logging (from Complex Logger - ✅ ADAPTED)
+   */
   logDbConnection: (success, details = {}) => {
     if (success) {
-      logger.info("Database connected successfully", details);
+      logger.info("Database connected successfully", {
+        ...details,
+        database: "PostgreSQL",
+        serverless: isServerless,
+      });
     } else {
-      logger.error("Database connection failed", details);
+      logger.error("Database connection failed", {
+        ...details,
+        database: "PostgreSQL",
+        serverless: isServerless,
+      });
     }
   },
 
-  // Performance monitoring
+  /**
+   * Performance monitoring (from Complex Logger - ✅ SIMPLIFIED)
+   */
   logPerformance: (metric) => {
     if (typeof metric === "object" && metric !== null) {
       logger.debug("Performance metric", {
         ...metric,
         timestamp: Date.now(),
+        memory: process.memoryUsage(),
+        uptime: process.uptime(),
       });
     }
   },
+
+  /**
+   * 🆕 ADDED: Serverless-specific utilities
+   */
+  logColdStart: () => {
+    logger.info("Serverless cold start", {
+      platform: process.env.VERCEL ? "Vercel" : "Unknown",
+      nodeVersion: process.version,
+      memoryLimit: process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE || "unknown",
+    });
+  },
+
+  logApiCall: (endpoint, method, duration, success = true) => {
+    logger.http(`API ${method} ${endpoint}`, {
+      endpoint,
+      method,
+      duration: `${duration}ms`,
+      success,
+      timestamp: Date.now(),
+    });
+  },
 };
 
-// Request logging middleware with error handling (PRESERVED FROM YOUR CODE)
+/**
+ * Enhanced Logger object (from Simple Logger - ✅ ENHANCED)
+ */
+const logger = {
+  /**
+   * Log error message (Enhanced with better error handling)
+   */
+  error: (message, meta = {}) => {
+    // Handle Error objects properly
+    if (meta instanceof Error) {
+      meta = logUtils.formatError(meta);
+    }
+    log("ERROR", message, meta);
+  },
+
+  /**
+   * Log warning message
+   */
+  warn: (message, meta = {}) => {
+    log("WARN", message, meta);
+  },
+
+  /**
+   * Log info message
+   */
+  info: (message, meta = {}) => {
+    log("INFO", message, meta);
+  },
+
+  /**
+   * 🆕 ADDED: HTTP request logging (from Complex Logger)
+   */
+  http: (message, meta = {}) => {
+    log("HTTP", message, meta);
+  },
+
+  /**
+   * Log debug message
+   */
+  debug: (message, meta = {}) => {
+    log("DEBUG", message, meta);
+  },
+
+  /**
+   * Log with custom level
+   */
+  log: (level, message, meta = {}) => {
+    log(level, message, meta);
+  },
+
+  /**
+   * Create a child logger with additional context (from Simple Logger - ✅ KEPT)
+   */
+  child: (context = {}) => {
+    return {
+      error: (message, meta = {}) =>
+        logger.error(message, { ...context, ...meta }),
+      warn: (message, meta = {}) =>
+        logger.warn(message, { ...context, ...meta }),
+      info: (message, meta = {}) =>
+        logger.info(message, { ...context, ...meta }),
+      http: (message, meta = {}) =>
+        logger.http(message, { ...context, ...meta }),
+      debug: (message, meta = {}) =>
+        logger.debug(message, { ...context, ...meta }),
+      log: (level, message, meta = {}) =>
+        logger.log(level, message, { ...context, ...meta }),
+    };
+  },
+};
+
+/**
+ * 🆕 ADDED: Request logging middleware (from Complex Logger - ✅ SERVERLESS-OPTIMIZED)
+ */
 export const requestLogger = (req, res, next) => {
   const start = Date.now();
 
+  // Log request start in development
+  if (isDevelopment) {
+    logger.debug(`→ ${req.method} ${req.url}`, {
+      userAgent: req.get("user-agent"),
+      ip: req.ip,
+    });
+  }
+
   // Log request completion
-  res.on("finish", () => {
+  const originalSend = res.send;
+  res.send = function (data) {
     const duration = Date.now() - start;
-    logger.http("HTTP Request", logUtils.formatRequest(req, res, duration));
+
+    // Use HTTP level for request logging
+    logger.http(
+      "Request completed",
+      logUtils.formatRequest(req, res, duration)
+    );
+
+    return originalSend.call(this, data);
+  };
+
+  // Handle response finish event
+  res.on("finish", () => {
+    if (!res.headersSent) {
+      const duration = Date.now() - start;
+      logger.http(
+        "Request finished",
+        logUtils.formatRequest(req, res, duration)
+      );
+    }
   });
 
-  // Log request failure
+  // Handle response errors
   res.on("error", (error) => {
     const duration = Date.now() - start;
-    logger.error("HTTP Request Error", {
+    logger.error("Request error", {
       ...logUtils.formatRequest(req, res, duration),
       error: logUtils.formatError(error),
     });
@@ -263,15 +358,94 @@ export const requestLogger = (req, res, next) => {
   next();
 };
 
-// Error logging middleware with type safety (PRESERVED FROM YOUR CODE)
+/**
+ * 🆕 ADDED: Error logging middleware (from Complex Logger - ✅ ENHANCED)
+ */
 export const errorLogger = (err, req, res, next) => {
-  logger.error("Unhandled Error", {
-    ...logUtils.formatError(err),
-    request: logUtils.formatRequest(req, res, 0),
+  logger.error("Unhandled request error", {
+    error: logUtils.formatError(err),
+    request: {
+      method: req.method,
+      url: req.url,
+      userAgent: req.get("user-agent"),
+      ip: req.ip,
+    },
+    serverless: isServerless,
   });
 
   next(err);
 };
 
-// Default export
+/**
+ * 🆕 ADDED: Startup logging
+ */
+if (isServerless) {
+  logger.info("🚀 Serverless logger initialized", {
+    platform: process.env.VERCEL ? "Vercel" : "Unknown Serverless",
+    logLevel: Object.keys(LOG_LEVELS).find(
+      (key) => LOG_LEVELS[key] === currentLogLevel
+    ),
+    nodeVersion: process.version,
+  });
+} else {
+  logger.info("💻 Development logger initialized", {
+    logLevel: Object.keys(LOG_LEVELS).find(
+      (key) => LOG_LEVELS[key] === currentLogLevel
+    ),
+    colorOutput: isDevelopment,
+    nodeVersion: process.version,
+  });
+}
+
+// 🆕 ADDED: Graceful error handling for unhandled rejections
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled Promise Rejection", {
+    reason: logUtils.formatError(reason),
+    promise: promise.toString(),
+  });
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught Exception", logUtils.formatError(error));
+
+  // In serverless, let the platform handle it
+  if (!isServerless) {
+    process.exit(1);
+  }
+});
+
 export default logger;
+
+/*
+USAGE EXAMPLES:
+
+// Basic logging
+logger.info("User registered", { userId: 123, email: "user@example.com" });
+logger.error("Database error", new Error("Connection failed"));
+
+// Child logger with context
+const userLogger = logger.child({ userId: 123, requestId: "abc-123" });
+userLogger.info("User logged in");  // Automatically includes userId and requestId
+
+// Request middleware
+app.use(requestLogger);
+
+// Error middleware
+app.use(errorLogger);
+
+// Database connection
+logUtils.logDbConnection(true, { host: "localhost", database: "school_ms" });
+
+// Performance monitoring
+logUtils.logPerformance({ operation: "user-query", duration: 45, recordCount: 150 });
+
+// API monitoring
+const start = Date.now();
+// ... API operation ...
+logUtils.logApiCall("/api/users", "POST", Date.now() - start, true);
+
+// Cold start detection (Vercel)
+if (isServerless) {
+  logUtils.logColdStart();
+}
+*/

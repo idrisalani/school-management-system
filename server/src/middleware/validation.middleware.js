@@ -1,272 +1,654 @@
-// server/src/middleware/validation.middleware.js
+// @ts-check
+// server/src/middleware/validation.middleware.js - Fixed TypeScript Issues
+import { body, param, query, validationResult } from "express-validator";
 import Joi from "joi";
-import { ApiError } from "../utils/errors.js";
+import { ApiError, ValidationError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 
 /**
- * Generic schema validator
+ * @typedef {Object} ValidationOptions
+ * @property {boolean} [abortEarly=false] - Stop validation on first error
+ * @property {boolean} [stripUnknown=false] - Remove unknown fields
+ * @property {boolean} [allowUnknown=false] - Allow unknown fields
+ */
+
+// ========================= ERROR HANDLING =========================
+
+/**
+ * Safe field name extractor for validation errors
+ * @param {any} error - Validation error object
+ * @returns {string} Field name
+ */
+const getErrorFieldName = (error) => {
+  if (typeof error === "object" && error !== null) {
+    if ("path" in error && typeof error.path === "string") {
+      return error.path;
+    }
+    if ("param" in error && typeof error.param === "string") {
+      return error.param;
+    }
+    if ("location" in error && typeof error.location === "string") {
+      return error.location;
+    }
+  }
+  return "unknown";
+};
+
+/**
+ * Safe value extractor for validation errors
+ * @param {any} error - Validation error object
+ * @returns {any} Error value
+ */
+const getErrorValue = (error) => {
+  return error && typeof error === "object" && "value" in error
+    ? error.value
+    : undefined;
+};
+
+/**
+ * Safe location extractor for validation errors
+ * @param {any} error - Validation error object
+ * @returns {string} Error location
+ */
+const getErrorLocation = (error) => {
+  return error &&
+    typeof error === "object" &&
+    "location" in error &&
+    typeof error.location === "string"
+    ? error.location
+    : "body";
+};
+
+/**
+ * Middleware to handle express-validator validation errors
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @param {import('express').NextFunction} next - Express next function
+ */
+export const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    const formattedErrors = errors.array().map((error) => ({
+      field: getErrorFieldName(error),
+      message: error.msg || "Validation failed",
+      value: getErrorValue(error),
+      location: getErrorLocation(error),
+    }));
+
+    logger.warn("Express-validator validation failed", {
+      url: req.originalUrl,
+      method: req.method,
+      errors: formattedErrors,
+    });
+
+    // Use ValidationError as a function, not constructor
+    const validationError = ValidationError("Validation failed", {
+      errors: formattedErrors,
+    });
+    return next(validationError);
+  }
+
+  next();
+};
+
+/**
+ * Generic Joi schema validator
  * @param {Joi.ObjectSchema} schema - Joi validation schema
+ * @param {ValidationOptions} options - Validation options
  * @returns {Function} Express middleware
  */
-export const validateSchema = (schema) => async (req, res, next) => {
-  try {
-    await schema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    const details = error.details.map((err) => ({
-      field: err.path.join("."),
-      message: err.message,
-    }));
-    next(new ApiError(400, "Validation failed", details));
-  }
-};
+export const validateSchema =
+  (schema, options = {}) =>
+  async (req, res, next) => {
+    try {
+      const validationOptions = {
+        abortEarly: false,
+        stripUnknown: false,
+        allowUnknown: false,
+        ...options,
+      };
+
+      const result = await schema.validateAsync(req.body, validationOptions);
+
+      // Replace req.body with validated data
+      req.body = result;
+
+      next();
+    } catch (error) {
+      logger.warn("Joi validation failed", {
+        url: req.originalUrl,
+        method: req.method,
+        error: error.message,
+      });
+
+      const details = error.details?.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+        value: err.value,
+      })) || [{ field: "unknown", message: error.message }];
+
+      next(new ApiError(400, "Validation failed", { errors: details }));
+    }
+  };
+
+// ========================= JOI SCHEMAS =========================
 
 /**
- * Validate grade creation/update data (PostgreSQL version)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next function
+ * Enhanced authentication schemas with PostgreSQL optimization
  */
-export const validateGrade = (req, res, next) => {
-  try {
-    const {
-      student_id,
-      class_id,
-      assignment_id,
-      score,
-      max_score,
-      term,
-      academic_year,
-    } = req.body;
-
-    const errors = [];
-
-    // Validate required fields
-    if (!student_id) errors.push("Student ID is required");
-    if (!class_id) errors.push("Class ID is required");
-    if (score === undefined || score === null) errors.push("Score is required");
-    if (!term) errors.push("Term is required");
-    if (!academic_year) errors.push("Academic year is required");
-
-    // Validate score
-    if (typeof score === "number") {
-      if (score < 0) {
-        errors.push("Score cannot be negative");
-      }
-      if (max_score && score > max_score) {
-        errors.push("Score cannot exceed maximum score");
-      }
-    } else {
-      errors.push("Score must be a number");
-    }
-
-    // Validate max_score if provided
-    if (max_score !== undefined && max_score !== null) {
-      if (typeof max_score !== "number" || max_score <= 0) {
-        errors.push("Maximum score must be a positive number");
-      }
-    }
-
-    // Validate term
-    const validTerms = ["first", "second", "third", "fourth"];
-    if (!validTerms.includes(term)) {
-      errors.push(`Term must be one of: ${validTerms.join(", ")}`);
-    }
-
-    // Validate academic year format (e.g., "2023-2024")
-    const yearPattern = /^\d{4}-\d{4}$/;
-    if (!yearPattern.test(academic_year)) {
-      errors.push("Academic year must be in format YYYY-YYYY");
-    } else {
-      const [startYear, endYear] = academic_year.split("-").map(Number);
-      if (endYear !== startYear + 1) {
-        errors.push("Invalid academic year range");
-      }
-    }
-
-    if (errors.length > 0) {
-      throw ApiError.validationError("Invalid grade data", errors);
-    }
-
-    next();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      next(error);
-    } else {
-      next(ApiError.internal("Grade validation failed"));
-    }
-  }
-};
-
-// Payment validation schema (PostgreSQL version)
-export const paymentSchema = Joi.object({
-  student_id: Joi.number().integer().positive().required().messages({
-    "number.base": "Student ID must be a number",
-    "number.integer": "Student ID must be an integer",
-    "number.positive": "Student ID must be positive",
-    "any.required": "Student ID is required",
-  }),
-  amount: Joi.number().positive().required().messages({
-    "number.base": "Amount must be a number",
-    "number.positive": "Amount must be positive",
-    "any.required": "Amount is required",
-  }),
-  description: Joi.string().max(500).optional(),
-  type: Joi.string()
-    .valid("tuition", "fees", "books", "other")
-    .required()
-    .messages({
-      "any.only": "Invalid payment type",
-      "any.required": "Payment type is required",
+const authSchemas = {
+  login: Joi.object({
+    email: Joi.string().email().optional().trim().lowercase().messages({
+      "string.email": "Please provide a valid email address",
     }),
-  academic_year: Joi.string()
-    .pattern(/^\d{4}-\d{4}$/)
-    .required()
-    .messages({
-      "string.pattern.base": "Academic year must be in format YYYY-YYYY",
-      "any.required": "Academic year is required",
+    username: Joi.string().min(3).max(30).optional().trim().messages({
+      "string.min": "Username must be at least 3 characters long",
+      "string.max": "Username cannot exceed 30 characters",
     }),
-});
-
-/**
- * Validate payment data
- */
-export const validatePayment = async (req, res, next) => {
-  try {
-    await paymentSchema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    const details = error.details.map((err) => ({
-      field: err.path.join("."),
-      message: err.message,
-    }));
-    next(new ApiError(400, "Invalid payment data", details));
-  }
-};
-
-// Authentication schemas
-const loginSchema = Joi.object({
-  email: Joi.string().min(3).required().messages({
-    "string.min": "Email or username must be at least 3 characters long",
-    "any.required": "Email or username is required",
-    "string.empty": "Email or username cannot be empty",
-  }),
-  password: Joi.string().min(8).required().messages({
-    "string.min": "Password must be at least 8 characters long",
-    "any.required": "Password is required",
-    "string.empty": "Password cannot be empty",
-  }),
-}); // Either email or username is required
-
-const registrationSchema = Joi.object({
-  // Name validation
-  name: Joi.string().min(2).max(50).required().trim().messages({
-    "string.min": "Name must be at least 2 characters long",
-    "string.max": "Name cannot exceed 50 characters",
-    "any.required": "Name is required",
-    "string.empty": "Name cannot be empty",
-  }),
-
-  // Email validation
-  email: Joi.string().email().required().trim().lowercase().messages({
-    "string.email": "Please enter a valid email address",
-    "any.required": "Email is required",
-    "string.empty": "Email cannot be empty",
-  }),
-
-  // Username validation (optional)
-  username: Joi.string().min(3).max(30).optional().trim().messages({
-    "string.min": "Username must be at least 3 characters long",
-    "string.max": "Username cannot exceed 30 characters",
-  }),
-
-  // Password validation
-  password: Joi.string()
-    .min(8)
-    .pattern(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
-    )
-    .required()
-    .messages({
+    password: Joi.string().min(8).required().messages({
       "string.min": "Password must be at least 8 characters long",
-      "string.pattern.base":
-        "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
       "any.required": "Password is required",
-      "string.empty": "Password cannot be empty",
     }),
-
-  // Password confirmation
-  confirmPassword: Joi.string().valid(Joi.ref("password")).required().messages({
-    "any.only": "Passwords must match",
-    "any.required": "Password confirmation is required",
-    "string.empty": "Password confirmation cannot be empty",
+  }).custom((value, helpers) => {
+    if (!value.email && !value.username) {
+      return helpers.error("custom.missing_identifier", {
+        message: "Either email or username is required",
+      });
+    }
+    return value;
   }),
 
-  // Role validation
-  role: Joi.string()
-    .valid("admin", "teacher", "student", "parent")
-    .required()
-    .messages({
-      "any.only":
-        "Invalid role. Must be one of: admin, teacher, student, parent",
-      "any.required": "Role is required",
-      "string.empty": "Role cannot be empty",
+  registration: Joi.object({
+    // Flexible name handling
+    name: Joi.string().min(2).max(100).optional().trim().messages({
+      "string.min": "Name must be at least 2 characters long",
+      "string.max": "Name cannot exceed 100 characters",
     }),
-});
-
-const passwordResetSchema = Joi.object({
-  token: Joi.string().required().messages({
-    "any.required": "Reset token is required",
-  }),
-  newPassword: Joi.string()
-    .min(8)
-    .pattern(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]/)
-    .required()
-    .messages({
-      "string.min": "Password must be at least 8 characters long",
-      "string.pattern.base":
-        "Password must contain at least one letter and one number",
-      "any.required": "New password is required",
+    firstName: Joi.string().min(2).max(50).optional().trim().messages({
+      "string.min": "First name must be at least 2 characters long",
+      "string.max": "First name cannot exceed 50 characters",
     }),
-});
+    lastName: Joi.string().min(2).max(50).optional().trim().messages({
+      "string.min": "Last name must be at least 2 characters long",
+      "string.max": "Last name cannot exceed 50 characters",
+    }),
+    email: Joi.string().email().required().trim().lowercase().messages({
+      "string.email": "Please provide a valid email address",
+      "any.required": "Email is required",
+    }),
+    username: Joi.string().min(3).max(30).optional().trim().messages({
+      "string.min": "Username must be at least 3 characters long",
+      "string.max": "Username cannot exceed 30 characters",
+    }),
+    password: Joi.string()
+      .min(8)
+      .pattern(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+      )
+      .required()
+      .messages({
+        "string.min": "Password must be at least 8 characters long",
+        "string.pattern.base":
+          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
+        "any.required": "Password is required",
+      }),
+    confirmPassword: Joi.string()
+      .valid(Joi.ref("password"))
+      .required()
+      .messages({
+        "any.only": "Passwords must match",
+        "any.required": "Password confirmation is required",
+      }),
+    role: Joi.string()
+      .valid("admin", "teacher", "student", "parent")
+      .default("student")
+      .messages({
+        "any.only":
+          "Invalid role. Must be one of: admin, teacher, student, parent",
+      }),
+    phone: Joi.string()
+      .pattern(/^\+?[1-9]\d{1,14}$/)
+      .optional()
+      .messages({
+        "string.pattern.base": "Please provide a valid phone number",
+      }),
+    dateOfBirth: Joi.date().optional().max("now").messages({
+      "date.max": "Date of birth cannot be in the future",
+    }),
+    address: Joi.string().max(255).optional(),
+  }).custom((value, helpers) => {
+    // Ensure we have some form of name
+    const hasName =
+      value.name || (value.firstName && value.lastName) || value.username;
+    if (!hasName) {
+      return helpers.error("custom.missing_name", {
+        message: "Either name, firstName+lastName, or username is required",
+      });
+    }
 
-export const validateLogin = async (req, res, next) => {
-  try {
-    // First, validate the basic structure
-    await loginSchema.validateAsync(req.body);
-
-    const { email, password } = req.body;
-
-    // Additional validation for email format (only if it contains @)
-    if (email.includes("@")) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return next(new ApiError(400, "Please enter a valid email address"));
+    // Construct full name if not provided
+    if (!value.name) {
+      if (value.firstName || value.lastName) {
+        value.name = `${value.firstName || ""} ${value.lastName || ""}`.trim();
+      } else {
+        value.name = value.username;
       }
     }
 
-    next();
-  } catch (error) {
-    const errorMessage = error.details?.[0]?.message || "Validation failed";
-    next(new ApiError(400, errorMessage));
-  }
+    return value;
+  }),
+
+  passwordReset: Joi.object({
+    token: Joi.string().required().messages({
+      "any.required": "Reset token is required",
+    }),
+    newPassword: Joi.string()
+      .min(8)
+      .pattern(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+      )
+      .required()
+      .messages({
+        "string.min": "Password must be at least 8 characters long",
+        "string.pattern.base":
+          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
+        "any.required": "New password is required",
+      }),
+  }),
+
+  passwordResetRequest: Joi.object({
+    email: Joi.string().email().required().trim().lowercase().messages({
+      "string.email": "Please provide a valid email address",
+      "any.required": "Email is required",
+    }),
+  }),
+
+  refreshToken: Joi.object({
+    refreshToken: Joi.string().required().messages({
+      "any.required": "Refresh token is required",
+    }),
+  }),
+
+  passwordChange: Joi.object({
+    currentPassword: Joi.string().required().messages({
+      "any.required": "Current password is required",
+    }),
+    newPassword: Joi.string()
+      .min(8)
+      .pattern(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+      )
+      .required()
+      .messages({
+        "string.min": "New password must be at least 8 characters long",
+        "string.pattern.base":
+          "New password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
+        "any.required": "New password is required",
+      }),
+  }),
+
+  profileUpdate: Joi.object({
+    name: Joi.string().min(2).max(100).optional().trim(),
+    firstName: Joi.string().min(2).max(50).optional().trim(),
+    lastName: Joi.string().min(2).max(50).optional().trim(),
+    username: Joi.string().min(3).max(30).optional().trim(),
+    phone: Joi.string()
+      .pattern(/^\+?[1-9]\d{1,14}$/)
+      .optional(),
+    address: Joi.string().max(255).optional(),
+    dateOfBirth: Joi.date().optional().max("now"),
+    profileImageUrl: Joi.string().uri().optional(),
+  })
+    .min(1)
+    .messages({
+      "object.min": "At least one field must be provided for update",
+    }),
 };
 
-export const validateRegistration = (req, res, next) => {
+/**
+ * Academic schemas for PostgreSQL
+ */
+const academicSchemas = {
+  grade: Joi.object({
+    student_id: Joi.number().integer().positive().required().messages({
+      "number.base": "Student ID must be a number",
+      "number.integer": "Student ID must be an integer",
+      "number.positive": "Student ID must be positive",
+      "any.required": "Student ID is required",
+    }),
+    class_id: Joi.number().integer().positive().required().messages({
+      "number.base": "Class ID must be a number",
+      "number.integer": "Class ID must be an integer",
+      "number.positive": "Class ID must be positive",
+      "any.required": "Class ID is required",
+    }),
+    assignment_id: Joi.number().integer().positive().optional().messages({
+      "number.base": "Assignment ID must be a number",
+      "number.integer": "Assignment ID must be an integer",
+      "number.positive": "Assignment ID must be positive",
+    }),
+    score: Joi.number().min(0).required().messages({
+      "number.base": "Score must be a number",
+      "number.min": "Score cannot be negative",
+      "any.required": "Score is required",
+    }),
+    max_score: Joi.number().positive().optional().messages({
+      "number.base": "Maximum score must be a number",
+      "number.positive": "Maximum score must be positive",
+    }),
+    term: Joi.string()
+      .valid("first", "second", "third", "fourth")
+      .required()
+      .messages({
+        "any.only": "Term must be one of: first, second, third, fourth",
+        "any.required": "Term is required",
+      }),
+    academic_year: Joi.string()
+      .pattern(/^\d{4}-\d{4}$/)
+      .required()
+      .custom((value, helpers) => {
+        const [startYear, endYear] = value.split("-").map(Number);
+        if (endYear !== startYear + 1) {
+          return helpers.error("custom.invalid_year_range");
+        }
+        return value;
+      })
+      .messages({
+        "string.pattern.base": "Academic year must be in format YYYY-YYYY",
+        "any.required": "Academic year is required",
+        "custom.invalid_year_range": "Invalid academic year range",
+      }),
+  }).custom((value, helpers) => {
+    if (value.max_score && value.score > value.max_score) {
+      return helpers.error("custom.score_exceeds_max");
+    }
+    return value;
+  }),
+
+  payment: Joi.object({
+    student_id: Joi.number().integer().positive().required(),
+    amount: Joi.number().positive().required(),
+    description: Joi.string().max(500).optional(),
+    type: Joi.string()
+      .valid(
+        "tuition",
+        "fees",
+        "books",
+        "supplies",
+        "transport",
+        "meals",
+        "other"
+      )
+      .required(),
+    academic_year: Joi.string()
+      .pattern(/^\d{4}-\d{4}$/)
+      .required(),
+    due_date: Joi.date().min("now").optional(),
+    payment_method: Joi.string()
+      .valid("cash", "card", "bank_transfer", "mobile_money", "check")
+      .optional(),
+  }),
+
+  class: Joi.object({
+    name: Joi.string().min(2).max(100).required().trim(),
+    code: Joi.string().min(2).max(20).required().trim().uppercase(),
+    description: Joi.string().max(500).optional().trim(),
+    department_id: Joi.number().integer().positive().required(),
+    teacher_id: Joi.number().integer().positive().optional(),
+    grade_level: Joi.string().required().trim(),
+    academic_year: Joi.string()
+      .pattern(/^\d{4}-\d{4}$/)
+      .required(),
+    max_students: Joi.number().integer().min(1).max(200).optional().default(30),
+    room_number: Joi.string().max(20).optional(),
+    schedule: Joi.array()
+      .items(
+        Joi.object({
+          day: Joi.string()
+            .valid(
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday"
+            )
+            .required(),
+          start_time: Joi.string()
+            .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
+            .required(),
+          end_time: Joi.string()
+            .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
+            .required(),
+        })
+      )
+      .optional(),
+  }),
+
+  assignment: Joi.object({
+    title: Joi.string().min(3).max(200).required().trim(),
+    description: Joi.string().max(2000).optional().trim(),
+    class_id: Joi.number().integer().positive().required(),
+    teacher_id: Joi.number().integer().positive().required(),
+    type: Joi.string()
+      .valid(
+        "homework",
+        "quiz",
+        "exam",
+        "project",
+        "lab",
+        "presentation",
+        "essay",
+        "midterm",
+        "final"
+      )
+      .required(),
+    max_points: Joi.number().positive().max(1000).optional().default(100),
+    due_date: Joi.date().min("now").required(),
+    submission_type: Joi.string()
+      .valid("online", "paper", "both")
+      .default("online"),
+    instructions: Joi.string().max(2000).optional(),
+    rubric: Joi.object().optional(),
+    attachments: Joi.array().items(Joi.string().uri()).optional(),
+  }),
+
+  user: Joi.object({
+    name: Joi.string().min(2).max(100).optional().trim(),
+    firstName: Joi.string().min(2).max(50).optional().trim(),
+    lastName: Joi.string().min(2).max(50).optional().trim(),
+    email: Joi.string().email().required().trim().lowercase(),
+    username: Joi.string().min(3).max(30).optional().trim(),
+    role: Joi.string()
+      .valid("admin", "teacher", "student", "parent")
+      .required(),
+    phone: Joi.string()
+      .pattern(/^\+?[1-9]\d{1,14}$/)
+      .optional(),
+    address: Joi.string().max(255).optional(),
+    dateOfBirth: Joi.date().max("now").optional(),
+    status: Joi.string()
+      .valid("active", "inactive", "suspended")
+      .default("active"),
+    department_id: Joi.number().integer().positive().optional(),
+    employee_id: Joi.string().max(20).optional(),
+    student_id: Joi.string().max(20).optional(),
+  }).custom((value, helpers) => {
+    // Construct name if not provided
+    if (!value.name && (value.firstName || value.lastName)) {
+      value.name = `${value.firstName || ""} ${value.lastName || ""}`.trim();
+    }
+    return value;
+  }),
+};
+
+// ========================= JOI VALIDATION MIDDLEWARE =========================
+
+export const validateLogin = validateSchema(authSchemas.login);
+export const validateRegistration = validateSchema(authSchemas.registration);
+export const validatePasswordReset = validateSchema(authSchemas.passwordReset);
+export const validatePasswordResetRequest = validateSchema(
+  authSchemas.passwordResetRequest
+);
+export const validateRefreshToken = validateSchema(authSchemas.refreshToken);
+export const validateChangePassword = validateSchema(
+  authSchemas.passwordChange
+);
+export const validateProfileUpdate = validateSchema(authSchemas.profileUpdate);
+
+export const validateGrade = validateSchema(academicSchemas.grade);
+export const validatePayment = validateSchema(academicSchemas.payment);
+export const validateClass = validateSchema(academicSchemas.class);
+export const validateAssignment = validateSchema(academicSchemas.assignment);
+export const validateUser = validateSchema(academicSchemas.user);
+
+// ========================= EXPRESS-VALIDATOR RULES =========================
+
+/**
+ * Email verification validation (for URL params)
+ */
+export const validateEmailVerification = [
+  param("token")
+    .notEmpty()
+    .isLength({ min: 10 })
+    .withMessage("Valid verification token is required"),
+  handleValidationErrors,
+];
+
+/**
+ * Email parameter validation
+ */
+export const validateEmailParam = [
+  param("email")
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Please provide a valid email address"),
+  handleValidationErrors,
+];
+
+/**
+ * ID parameter validation
+ */
+export const validateId = [
+  param("id").isInt({ min: 1 }).withMessage("Invalid ID format"),
+  handleValidationErrors,
+];
+
+/**
+ * Pagination validation
+ */
+export const validatePagination = [
+  query("page")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("Page must be a positive integer"),
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage("Limit must be between 1 and 100"),
+  query("sortBy")
+    .optional()
+    .matches(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+    .withMessage("Sort field must be a valid column name"),
+  query("sortOrder")
+    .optional()
+    .isIn(["asc", "desc", "ASC", "DESC"])
+    .withMessage("Sort order must be 'asc' or 'desc'"),
+  handleValidationErrors,
+];
+
+/**
+ * Search validation
+ */
+export const validateSearch = [
+  query("q")
+    .optional()
+    .isLength({ min: 1, max: 100 })
+    .trim()
+    .escape()
+    .withMessage("Search query must be between 1 and 100 characters"),
+  query("field")
+    .optional()
+    .matches(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+    .withMessage("Search field must be a valid column name"),
+  handleValidationErrors,
+];
+
+/**
+ * Date range validation - Fixed TypeScript issues
+ */
+export const validateDateRange = [
+  query("startDate")
+    .optional()
+    .isISO8601()
+    .toDate()
+    .withMessage("Please provide a valid start date"),
+  query("endDate")
+    .optional()
+    .isISO8601()
+    .toDate()
+    .withMessage("Please provide a valid end date"),
+  query("endDate").custom((value, { req }) => {
+    // Fixed: Safe access to req.query
+    if (value && req.query && req.query.startDate) {
+      const startDate = new Date(req.query.startDate);
+      const endDate = new Date(value);
+      if (endDate <= startDate) {
+        throw new Error("End date must be after start date");
+      }
+    }
+    return true;
+  }),
+  handleValidationErrors,
+];
+
+/**
+ * File upload validation
+ */
+export const validateFileUpload = [
+  body("fileName")
+    .optional()
+    .isLength({ min: 1, max: 255 })
+    .trim()
+    .withMessage("File name must be between 1 and 255 characters"),
+  body("fileType")
+    .optional()
+    .isIn([
+      "pdf",
+      "doc",
+      "docx",
+      "txt",
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "xlsx",
+      "pptx",
+    ])
+    .withMessage("Invalid file type"),
+  body("fileSize")
+    .optional()
+    .isInt({ min: 1, max: 52428800 }) // 50MB
+    .withMessage("File size must be between 1 byte and 50MB"),
+  body("category")
+    .optional()
+    .isIn(["assignment", "resource", "profile", "document"])
+    .withMessage("Invalid file category"),
+  handleValidationErrors,
+];
+
+// ========================= CUSTOM VALIDATION FUNCTIONS =========================
+
+/**
+ * Custom validation for flexible user data handling
+ * Handles different name field combinations
+ */
+export const validateUserData = (req, res, next) => {
   try {
     const { email, password, firstName, lastName, username, name, role } =
       req.body;
-
-    // ✅ FLEXIBLE NAME HANDLING - Accept either 'name' or 'firstName'+'lastName'
-    let fullName = name;
-    if (!fullName && (firstName || lastName)) {
-      fullName = `${firstName || ""} ${lastName || ""}`.trim();
-    }
-    if (!fullName && username) {
-      fullName = username; // Fallback to username if no other name provided
-    }
-
-    // Validation rules
     const errors = [];
 
     // Email validation
@@ -279,20 +661,27 @@ export const validateRegistration = (req, res, next) => {
       });
     }
 
-    // Password validation
-    if (!password) {
-      errors.push({ message: "Password is required", field: "password" });
-    } else if (password.length < 8) {
+    // Password validation (if provided)
+    if (password && password.length < 8) {
       errors.push({
         message: "Password must be at least 8 characters long",
         field: "password",
       });
     }
 
-    // Name validation (now flexible)
+    // Flexible name handling
+    let fullName = name;
+    if (!fullName && (firstName || lastName)) {
+      fullName = `${firstName || ""} ${lastName || ""}`.trim();
+    }
+    if (!fullName && username) {
+      fullName = username;
+    }
+
     if (!fullName) {
       errors.push({
-        message: "Name is required (provide either name or firstName/lastName)",
+        message:
+          "Name is required (provide either name, firstName/lastName, or username)",
         field: "name",
       });
     }
@@ -305,164 +694,161 @@ export const validateRegistration = (req, res, next) => {
 
     if (errors.length > 0) {
       return res.status(400).json({
-        success: false,
+        status: "error",
         message: "Validation failed",
-        errors: errors,
+        errors,
       });
     }
 
-    // ✅ ADD COMPUTED NAME TO REQUEST BODY
+    // Add computed name to request body
     req.body.name = fullName;
-
     next();
   } catch (error) {
-    logger.error("Validation error:", error);
+    logger.error("User data validation error:", error);
     return res.status(500).json({
-      success: false,
+      status: "error",
       message: "Validation error occurred",
     });
   }
 };
 
-export const validatePasswordReset = async (req, res, next) => {
-  try {
-    await passwordResetSchema.validateAsync(req.body);
-    next();
-  } catch (error) {
-    next(new ApiError(400, error.details[0].message));
+/**
+ * Validate academic year format and logic
+ */
+export const validateAcademicYear = (req, res, next) => {
+  const { academic_year } = req.body;
+
+  if (!academic_year) {
+    return next();
   }
+
+  const yearPattern = /^\d{4}-\d{4}$/;
+  if (!yearPattern.test(academic_year)) {
+    return next(new ApiError(400, "Academic year must be in format YYYY-YYYY"));
+  }
+
+  const [startYear, endYear] = academic_year.split("-").map(Number);
+  if (endYear !== startYear + 1) {
+    return next(new ApiError(400, "Invalid academic year range"));
+  }
+
+  next();
 };
 
-export const validateEmailVerification = (req, res, next) => {
-  try {
-    const { token } = req.params;
+/**
+ * Validate time format (HH:MM)
+ */
+export const validateTimeFormat = (timeString) => {
+  const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  return timePattern.test(timeString);
+};
 
-    if (!token) {
-      throw new ApiError(400, "Verification token is required");
+/**
+ * Security validation for preventing injection attacks - Fixed regex
+ */
+export const sanitizeInput = (req, res, next) => {
+  // Remove potentially dangerous characters from string inputs
+  const sanitize = (obj) => {
+    for (const key in obj) {
+      if (typeof obj[key] === "string") {
+        // Remove SQL injection patterns - Fixed regex range
+        obj[key] = obj[key].replace(/[';-]/g, "");
+        // Remove script tags
+        obj[key] = obj[key].replace(
+          /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+          ""
+        );
+      } else if (typeof obj[key] === "object" && obj[key] !== null) {
+        sanitize(obj[key]);
+      }
     }
+  };
 
-    next();
-  } catch (error) {
-    next(error);
-  }
+  if (req.body) sanitize(req.body);
+  if (req.query) sanitize(req.query);
+  if (req.params) sanitize(req.params);
+
+  next();
 };
 
-// User validation schema (PostgreSQL version)
-const userSchema = Joi.object({
-  name: Joi.string().min(2).max(50).required().messages({
-    "string.min": "Name must be at least 2 characters long",
-    "string.max": "Name cannot exceed 50 characters",
-    "any.required": "Name is required",
-  }),
-  email: Joi.string().email().required().messages({
-    "string.email": "Please enter a valid email address",
-    "any.required": "Email is required",
-  }),
-  username: Joi.string().min(3).max(30).optional().messages({
-    "string.min": "Username must be at least 3 characters long",
-    "string.max": "Username cannot exceed 30 characters",
-  }),
-  role: Joi.string()
-    .valid("admin", "teacher", "student", "parent")
-    .required()
-    .messages({
-      "any.only": "Invalid role selected",
-      "any.required": "Role is required",
-    }),
-  phone: Joi.string()
-    .pattern(/^\+?[1-9]\d{1,14}$/)
-    .optional()
-    .messages({
-      "string.pattern.base": "Please enter a valid phone number",
-    }),
-  address: Joi.string().max(200).optional(),
-});
-
-// Profile update schema
-const profileUpdateSchema = Joi.object({
-  name: Joi.string().min(2).max(50).optional(),
-  username: Joi.string().min(3).max(30).optional(),
-  phone: Joi.string()
-    .pattern(/^\+?[1-9]\d{1,14}$/)
-    .optional(),
-  address: Joi.string().max(200).optional(),
-})
-  .min(1)
-  .messages({
-    "object.min": "At least one field must be provided for update",
-  });
+// ========================= UTILITY FUNCTIONS =========================
 
 /**
- * Validate user creation/update data
+ * Create custom validation middleware
+ * @param {Function} validationFn - Custom validation function
+ * @param {string} errorMessage - Error message for validation failure
+ * @returns {Function} Express middleware
  */
-export const validateUser = async (req, res, next) => {
-  try {
-    await userSchema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    next(new ApiError(400, "Invalid user data", error.details));
-  }
+export const createCustomValidation = (
+  validationFn,
+  errorMessage = "Validation failed"
+) => {
+  return (req, res, next) => {
+    try {
+      const isValid = validationFn(req.body, req.params, req.query);
+      if (!isValid) {
+        return next(new ApiError(400, errorMessage));
+      }
+      next();
+    } catch (error) {
+      logger.error("Custom validation error:", error);
+      next(new ApiError(400, errorMessage));
+    }
+  };
 };
 
 /**
- * Validate profile update data
+ * Combine multiple validation middlewares
+ * @param {...Function} validations - Validation middlewares to combine
+ * @returns {Function[]} Array of validation middlewares
  */
-export const validateProfileUpdate = async (req, res, next) => {
-  try {
-    await profileUpdateSchema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    next(new ApiError(400, "Invalid profile data", error.details));
-  }
+export const combineValidations = (...validations) => {
+  return validations.flat();
 };
 
-// Password change schema
-const passwordChangeSchema = Joi.object({
-  currentPassword: Joi.string().required().messages({
-    "any.required": "Current password is required",
-  }),
-  newPassword: Joi.string()
-    .min(8)
-    .pattern(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]/)
-    .required()
-    .messages({
-      "string.min": "New password must be at least 8 characters long",
-      "string.pattern.base":
-        "New password must contain at least one letter and one number",
-      "any.required": "New password is required",
-    }),
-}).required();
+// ========================= EXPORTS =========================
 
-/**
- * Validate password change data
- */
-export const validatePasswordChange = async (req, res, next) => {
-  try {
-    await passwordChangeSchema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    next(new ApiError(400, "Invalid password data", error.details));
-  }
-};
+export default {
+  // Core validation functions
+  validateSchema,
+  handleValidationErrors,
 
-// Username validation schema
-const usernameSchema = Joi.object({
-  username: Joi.string().min(3).max(30).required().trim().messages({
-    "string.min": "Username must be at least 3 characters long",
-    "string.max": "Username cannot exceed 30 characters",
-    "any.required": "Username is required",
-    "string.empty": "Username cannot be empty",
-  }),
-});
+  // Authentication validations
+  validateLogin,
+  validateRegistration,
+  validatePasswordReset,
+  validatePasswordResetRequest,
+  validateEmailVerification,
+  validateRefreshToken,
+  validateChangePassword,
+  validateProfileUpdate,
 
-/**
- * Validate username update data
- */
-export const validateUsername = async (req, res, next) => {
-  try {
-    await usernameSchema.validateAsync(req.body, { abortEarly: false });
-    next();
-  } catch (error) {
-    next(new ApiError(400, "Invalid username data", error.details));
-  }
+  // Academic validations
+  validateGrade,
+  validatePayment,
+  validateClass,
+  validateAssignment,
+  validateUser,
+
+  // Parameter validations
+  validateId,
+  validateEmailParam,
+  validatePagination,
+  validateSearch,
+  validateDateRange,
+  validateFileUpload,
+
+  // Custom validations
+  validateUserData,
+  validateAcademicYear,
+  sanitizeInput,
+
+  // Utility functions
+  createCustomValidation,
+  combineValidations,
+  validateTimeFormat,
+
+  // Schemas for direct use
+  authSchemas,
+  academicSchemas,
 };
