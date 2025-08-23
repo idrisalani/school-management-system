@@ -382,11 +382,12 @@ const Register = () => {
       // Prepare registration data for PostgreSQL backend
       /** @type {RegisterData} */
       const registrationData = {
-        username: username, // NEW: john.smith format
-        firstName: formData.firstName.trim(), // John
-        lastName: formData.lastName.trim(), // Smith
+        username: username,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
+        confirmPassword: formData.confirmPassword, // ✅ ADD THIS LINE
         role: formData.role,
       };
 
