@@ -60,40 +60,53 @@ const getErrorLocation = (error) => {
 };
 
 /**
- * Middleware to handle express-validator validation errors
+ * FIXED: Middleware to handle express-validator validation errors
+ * This is the function that was causing the error at line 131
  * @param {import('express').Request} req - Express request object
  * @param {import('express').Response} res - Express response object
  * @param {import('express').NextFunction} next - Express next function
  */
 export const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
+  try {
+    const errors = validationResult(req);
 
-  if (!errors.isEmpty()) {
-    const formattedErrors = errors.array().map((error) => ({
-      field: getErrorFieldName(error),
-      message: error.msg || "Validation failed",
-      value: getErrorValue(error),
-      location: getErrorLocation(error),
-    }));
+    if (!errors.isEmpty()) {
+      const formattedErrors = errors.array().map((error) => ({
+        field: getErrorFieldName(error),
+        message: error.msg || "Validation failed",
+        value: getErrorValue(error),
+        location: getErrorLocation(error),
+      }));
 
-    logger.warn("Express-validator validation failed", {
-      url: req.originalUrl,
-      method: req.method,
-      errors: formattedErrors,
+      logger.warn("Express-validator validation failed", {
+        url: req.originalUrl,
+        method: req.method,
+        errors: formattedErrors,
+      });
+
+      // FIXED: Use proper ValidationError function from your errors.js
+      const validationError = ValidationError("Validation failed", {
+        errors: formattedErrors,
+      });
+
+      return next(validationError);
+    }
+
+    next();
+  } catch (error) {
+    logger.error("Validation middleware error:", error);
+
+    // FIXED: Return proper error response instead of calling next with error
+    return res.status(500).json({
+      status: "error",
+      message: "Internal validation error",
+      timestamp: new Date().toISOString(),
     });
-
-    // Use ValidationError as a function, not constructor
-    const validationError = ValidationError("Validation failed", {
-      errors: formattedErrors,
-    });
-    return next(validationError);
   }
-
-  next();
 };
 
 /**
- * Generic Joi schema validator
+ * Generic Joi schema validator - using your existing system
  * @param {Joi.ObjectSchema} schema - Joi validation schema
  * @param {ValidationOptions} options - Validation options
  * @returns {Function} Express middleware
@@ -128,14 +141,18 @@ export const validateSchema =
         value: err.value,
       })) || [{ field: "unknown", message: error.message }];
 
-      next(new ApiError(400, "Validation failed", { errors: details }));
+      // FIXED: Use proper ApiError from your errors.js
+      const validationError = new ApiError(400, "Validation failed", {
+        errors: details,
+      });
+      next(validationError);
     }
   };
 
 // ========================= JOI SCHEMAS =========================
 
 /**
- * Enhanced authentication schemas with PostgreSQL optimization
+ * Enhanced authentication schemas using your existing validators
  */
 const authSchemas = {
   login: Joi.object({
@@ -160,7 +177,7 @@ const authSchemas = {
   }),
 
   registration: Joi.object({
-    // Flexible name handling
+    // Flexible name handling to match your existing system
     name: Joi.string().min(2).max(100).optional().trim().messages({
       "string.min": "Name must be at least 2 characters long",
       "string.max": "Name cannot exceed 100 characters",
@@ -190,7 +207,7 @@ const authSchemas = {
       .messages({
         "string.min": "Password must be at least 8 characters long",
         "string.pattern.base":
-          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
+          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character (@$!%*?&)",
         "any.required": "Password is required",
       }),
     confirmPassword: Joi.string()
@@ -252,7 +269,7 @@ const authSchemas = {
       .messages({
         "string.min": "Password must be at least 8 characters long",
         "string.pattern.base":
-          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character",
+          "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character (@$!%*?&)",
         "any.required": "New password is required",
       }),
   }),
@@ -744,14 +761,14 @@ export const validateTimeFormat = (timeString) => {
 };
 
 /**
- * Security validation for preventing injection attacks - Fixed regex
+ * Security validation for preventing injection attacks
  */
 export const sanitizeInput = (req, res, next) => {
   // Remove potentially dangerous characters from string inputs
   const sanitize = (obj) => {
     for (const key in obj) {
       if (typeof obj[key] === "string") {
-        // Remove SQL injection patterns - Fixed regex range
+        // Remove SQL injection patterns
         obj[key] = obj[key].replace(/[';-]/g, "");
         // Remove script tags
         obj[key] = obj[key].replace(
