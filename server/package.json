@@ -1,107 +1,260 @@
 {
-    "name": "school-management-system-server",
-    "version": "2.0.0",
-    "description": "School Management System Server with PostgreSQL",
-    "main": "src/server.js",
-    "type": "module",
-    "scripts": {
-        "start": "node src/server.js",
-        "dev": "nodemon src/server.js",
-        "vercel-build": "echo 'Build complete'",
-        "test": "jest",
-        "test:watch": "jest --watch",
-        "test:coverage": "jest --coverage",
-        "lint": "eslint src/**/*.js",
-        "lint:fix": "eslint src/**/*.js --fix",
-        "generate-keys": "node src/utils/jwt.js",
-        "type-check": "npx tsc --noEmit",
-        "type-check:watch": "npx tsc --noEmit --watch",
-        "build": "echo 'No build step required for Node.js'",
-        "db:test": "node -e \"import('./src/config/database.js').then(db => db.testConnection())\"",
-        "db:status": "node -e \"import('./src/config/database.js').then(db => db.getDatabaseStatus().then(console.log))\"",
-        "db:health": "node -e \"import('./src/config/database.js').then(db => db.healthCheck().then(console.log))\"",
-        "validate:types": "npx tsc --noEmit && echo 'TypeScript validation passed!'",
-        "auth:test": "node -e \"console.log('Testing auth routes...'); fetch('http://localhost:3001/api/v1/auth/test').then(r=>r.json()).then(console.log).catch(console.error)\""
+  "name": "school-management-system-server",
+  "version": "2.0.0",
+  "description": "Production-ready School Management System Server with comprehensive authentication and advanced features",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build": "echo 'No build step required for Node.js API'",
+    "vercel-build": "echo 'API build complete'",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --watchAll=false",
+    "test:integration": "jest --testPathPattern=integration --runInBand",
+    "test:unit": "jest --testPathPattern=unit",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix",
+    "format": "prettier --write src/**/*.js",
+    "type-check": "npx tsc --noEmit",
+    "type-check:watch": "npx tsc --noEmit --watch",
+    "validate:types": "npx tsc --noEmit && echo 'TypeScript validation passed!'",
+    "db:test": "node -e \"import('./src/config/database.js').then(db => db.testConnection())\"",
+    "db:status": "node -e \"import('./src/config/database.js').then(db => db.getDatabaseStatus().then(console.log))\"",
+    "db:health": "node -e \"import('./src/config/database.js').then(db => db.healthCheck().then(console.log))\"",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "db:cleanup": "node scripts/cleanup.js",
+    "auth:test": "node -e \"console.log('Testing auth routes...'); fetch('http://localhost:3001/api/auth/health').then(r=>r.json()).then(console.log).catch(console.error)\"",
+    "generate-keys": "node src/utils/jwt.js",
+    "security:audit": "npm audit && npm audit fix",
+    "security:check": "npm audit --audit-level high",
+    "logs:clear": "rm -rf logs/*.log",
+    "logs:view": "tail -f logs/combined.log",
+    "health:check": "curl -f http://localhost:3001/api/health || exit 1",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop school-management-api",
+    "pm2:restart": "pm2 restart school-management-api",
+    "pm2:logs": "pm2 logs school-management-api"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.732.0",
+    "@aws-sdk/client-ses": "^3.731.1",
+    "@aws-sdk/credential-provider-node": "^3.731.1",
+    "@aws-sdk/s3-request-presigner": "^3.732.0",
+    "@sendgrid/mail": "^7.7.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dayjs": "^1.11.13",
+    "date-fns": "^2.30.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.1",
+    "express-validator": "^7.2.1",
+    "helmet": "^7.2.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.16.3",
+    "sharp": "^0.32.6",
+    "stripe": "^18.4.0",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.3",
+    "@babel/preset-env": "^7.23.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.7.5",
+    "@types/cookie-parser": "^1.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.23",
+    "@types/express-rate-limit": "^5.1.3",
+    "@types/jest": "^29.5.10",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/lodash": "^4.14.202",
+    "@types/morgan": "^1.9.9",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.19.11",
+    "@types/nodemailer": "^6.4.14",
+    "@types/pg": "^8.15.5",
+    "@types/sharp": "^0.32.0",
+    "@types/uuid": "^9.0.7",
+    "@types/ws": "^8.5.10",
+    "babel-jest": "^29.7.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.54.0",
+    "eslint-config-node": "^4.1.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-security": "^1.7.1",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.1.0",
+    "supertest": "^6.3.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "school-management",
+    "education",
+    "api",
+    "nodejs",
+    "express",
+    "postgresql",
+    "authentication",
+    "jwt",
+    "rest-api",
+    "typescript",
+    "production-ready",
+    "enterprise"
+  ],
+  "author": {
+    "name": "School Management Team",
+    "email": "dev@schoolms.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/school-management-system"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/school-management-system/issues"
+  },
+  "homepage": "https://github.com/yourusername/school-management-system#readme",
+  "jest": {
+    "testEnvironment": "node",
+    "preset": "babel-jest",
+    "transform": {
+      "^.+\\.js$": "babel-jest"
     },
-    "dependencies": {
-        "@aws-sdk/client-s3": "^3.732.0",
-        "@aws-sdk/client-ses": "^3.731.1",
-        "@aws-sdk/credential-provider-node": "^3.731.1",
-        "@aws-sdk/s3-request-presigner": "^3.732.0",
-        "bcryptjs": "^2.4.3",
-        "compression": "^1.8.1",
-        "cookie-parser": "^1.4.7",
-        "cors": "^2.8.5",
-        "dayjs": "^1.11.13",
-        "dotenv": "^16.4.7",
-        "express": "^4.21.2",
-        "express-rate-limit": "^7.5.1",
-        "express-validator": "^7.2.1",
-        "helmet": "^7.2.0",
-        "joi": "^17.13.3",
-        "jsonwebtoken": "^9.0.2",
-        "morgan": "^1.10.0",
-        "multer": "^2.0.2",
-        "nodemailer": "^6.9.16",
-        "pg": "^8.16.3",
-        "stripe": "^18.4.0",
-        "uuid": "^11.0.5",
-        "winston": "^3.17.0",
-        "winston-daily-rotate-file": "^4.7.1",
-        "ws": "^8.18.0",
-        "zod": "^3.24.1"
+    "testMatch": [
+      "**/tests/**/*.test.js",
+      "**/tests/**/*.spec.js",
+      "**/__tests__/**/*.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/build/",
+      "/dist/"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/server.js",
+      "!src/config/**",
+      "!src/utils/logger.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "text-summary",
+      "lcov",
+      "clover",
+      "html"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
     },
-    "devDependencies": {
-        "@babel/core": "^7.23.3",
-        "@babel/preset-env": "^7.23.3",
-        "@types/bcryptjs": "^2.4.6",
-        "@types/compression": "^1.7.5",
-        "@types/cookie-parser": "^1.4.6",
-        "@types/cors": "^2.8.17",
-        "@types/express": "^4.17.23",
-        "@types/express-rate-limit": "^5.1.3",
-        "@types/jest": "^29.5.10",
-        "@types/jsonwebtoken": "^9.0.5",
-        "@types/morgan": "^1.9.9",
-        "@types/multer": "^1.4.11",
-        "@types/node": "^20.19.11",
-        "@types/nodemailer": "^6.4.14",
-        "@types/pg": "^8.15.5",
-        "@types/uuid": "^9.0.7",
-        "@types/ws": "^8.5.10",
-        "babel-jest": "^29.7.0",
-        "eslint": "^8.54.0",
-        "jest": "^29.7.0",
-        "nodemon": "^3.0.1",
-        "supertest": "^6.3.3",
-        "typescript": "^5.9.2"
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "extensionsToTreatAsEsm": [
+      ".js"
+    ],
+    "globals": {
+      "__DEV__": true
     },
-    "jest": {
-        "testEnvironment": "node",
-        "preset": "babel-jest",
-        "transform": {
-            "^.+\\.js$": "babel-jest"
-        },
-        "testMatch": [
-            "**/tests/**/*.test.js"
-        ],
-        "collectCoverageFrom": [
-            "src/**/*.js"
-        ],
-        "coverageDirectory": "coverage",
-        "coverageReporters": [
-            "text",
-            "lcov",
-            "clover"
-        ],
-        "extensionsToTreatAsEsm": [
-            ".js"
-        ],
-        "globals": {
-            "__DEV__": true
+    "testTimeout": 30000,
+    "verbose": true
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src/"
+    ],
+    "ext": "js,json",
+    "env": {
+      "NODE_ENV": "development"
+    },
+    "delay": 1000,
+    "ignore": [
+      "logs/**",
+      "tests/**",
+      "coverage/**"
+    ]
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es2022": true,
+      "jest": true
+    },
+    "extends": [
+      "eslint:recommended",
+      "plugin:node/recommended",
+      "plugin:security/recommended"
+    ],
+    "parserOptions": {
+      "ecmaVersion": "latest",
+      "sourceType": "module"
+    },
+    "plugins": [
+      "security"
+    ],
+    "rules": {
+      "no-console": "warn",
+      "no-unused-vars": "error",
+      "prefer-const": "error",
+      "no-var": "error",
+      "security/detect-object-injection": "warn",
+      "security/detect-non-literal-regexp": "warn",
+      "security/detect-unsafe-regex": "error"
+    },
+    "ignorePatterns": [
+      "node_modules/",
+      "coverage/",
+      "logs/"
+    ]
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": false,
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "bracketSpacing": true,
+    "arrowParens": "always",
+    "endOfLine": "lf"
+  },
+  "babel": {
+    "presets": [
+      [
+        "@babel/preset-env",
+        {
+          "targets": {
+            "node": "18"
+          }
         }
-    },
-    "engines": {
-        "node": ">=18.0.0"
-    }
+      ]
+    ]
+  }
 }

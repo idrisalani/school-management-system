@@ -14,7 +14,7 @@ const isServerless =
   process.env.NETLIFY;
 
 // Create database-specific logger
-const dbLogger = logger.child({ module: "database" });
+const dbLogger = logger.child ? logger.child({ module: "database" }) : logger;
 
 // Global connection pool - properly typed
 /** @type {pkg.Pool | null} */
@@ -183,7 +183,7 @@ export const testConnection = async () => {
 };
 
 /**
- * 📝 EXECUTE QUERY
+ * FIXED: 📝 EXECUTE QUERY - Fixed logger compatibility while keeping all features
  * @param {string} text - SQL query text
  * @param {Array} params - Query parameters
  * @param {Object} context - Request context for correlation
@@ -193,10 +193,12 @@ export const query = async (text, params = [], context = {}) => {
   const start = Date.now();
   const queryId = Math.random().toString(36).substring(7);
 
-  const queryLogger = dbLogger.child({
+  // FIXED: Use dbLogger directly with context instead of nested child
+  const logContext = {
+    module: "database",
     queryId,
     ...context,
-  });
+  };
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -210,7 +212,8 @@ export const query = async (text, params = [], context = {}) => {
 
     const client = await poolInstance.connect();
     try {
-      queryLogger.debug("Executing query", {
+      dbLogger.debug("Executing query", {
+        ...logContext,
         queryPreview: text.substring(0, 100) + (text.length > 100 ? "..." : ""),
         paramCount: params.length,
         poolStats: getPoolStats(),
@@ -228,7 +231,8 @@ export const query = async (text, params = [], context = {}) => {
       });
 
       if (!isProduction) {
-        queryLogger.debug("Query completed successfully", {
+        dbLogger.debug("Query completed successfully", {
+          ...logContext,
           duration: `${duration}ms`,
           rowCount: result.rowCount || 0,
           poolStats: getPoolStats(),
@@ -242,13 +246,13 @@ export const query = async (text, params = [], context = {}) => {
   } catch (error) {
     const duration = Date.now() - start;
 
-    queryLogger.error("Database query failed", {
+    dbLogger.error("Database query failed", {
+      ...logContext,
       error: logUtils.formatError(error),
       duration: `${duration}ms`,
       queryPreview: text.substring(0, 100) + "...",
       paramCount: params.length,
       poolStats: getPoolStats(),
-      queryId,
     });
 
     logUtils.logPerformance({
@@ -264,7 +268,7 @@ export const query = async (text, params = [], context = {}) => {
 };
 
 /**
- * 🔄 TRANSACTION SUPPORT
+ * FIXED: 🔄 TRANSACTION SUPPORT - Fixed logger compatibility
  * @param {Function} callback - Function that receives client
  * @param {Object} context - Request context
  * @returns {Promise<any>} Transaction result
@@ -273,10 +277,12 @@ export const withTransaction = async (callback, context = {}) => {
   const start = Date.now();
   const transactionId = Math.random().toString(36).substring(7);
 
-  const transactionLogger = dbLogger.child({
+  // FIXED: Use dbLogger directly with context
+  const logContext = {
+    module: "database",
     transactionId,
     ...context,
-  });
+  };
 
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL not configured");
@@ -290,7 +296,8 @@ export const withTransaction = async (callback, context = {}) => {
   const client = await poolInstance.connect();
 
   try {
-    transactionLogger.debug("Transaction started", {
+    dbLogger.debug("Transaction started", {
+      ...logContext,
       poolStats: getPoolStats(),
     });
 
@@ -299,9 +306,9 @@ export const withTransaction = async (callback, context = {}) => {
     await client.query("COMMIT");
 
     const duration = Date.now() - start;
-    transactionLogger.info("Transaction completed successfully", {
+    dbLogger.info("Transaction completed successfully", {
+      ...logContext,
       duration: `${duration}ms`,
-      transactionId,
     });
 
     logUtils.logPerformance({
@@ -316,10 +323,10 @@ export const withTransaction = async (callback, context = {}) => {
     await client.query("ROLLBACK");
     const duration = Date.now() - start;
 
-    transactionLogger.error("Transaction rolled back", {
+    dbLogger.error("Transaction rolled back", {
+      ...logContext,
       error: logUtils.formatError(error),
       duration: `${duration}ms`,
-      transactionId,
     });
 
     logUtils.logPerformance({
@@ -337,19 +344,22 @@ export const withTransaction = async (callback, context = {}) => {
 };
 
 /**
- * 📦 BATCH QUERY EXECUTION
+ * FIXED: 📦 BATCH QUERY EXECUTION - Fixed logger compatibility
  * @param {Array} queries - Array of {text, params} objects
  * @param {Object} context - Request context
  * @returns {Promise<Array>} Array of query results
  */
 export const batchQuery = async (queries, context = {}) => {
-  const batchLogger = dbLogger.child({
+  // FIXED: Use dbLogger directly with context
+  const logContext = {
+    module: "database",
     batchSize: queries.length,
     ...context,
-  });
+  };
 
   return withTransaction(async (client) => {
-    batchLogger.debug("Executing batch queries", {
+    dbLogger.debug("Executing batch queries", {
+      ...logContext,
       queryCount: queries.length,
     });
 
@@ -359,12 +369,14 @@ export const batchQuery = async (queries, context = {}) => {
       const result = await client.query(text, params || []);
       results.push(result);
 
-      batchLogger.debug(`Batch query ${i + 1}/${queries.length} completed`, {
+      dbLogger.debug(`Batch query ${i + 1}/${queries.length} completed`, {
+        ...logContext,
         rowCount: result.rowCount || 0,
       });
     }
 
-    batchLogger.info("Batch queries completed successfully", {
+    dbLogger.info("Batch queries completed successfully", {
+      ...logContext,
       totalQueries: queries.length,
       totalRows: results.reduce((sum, r) => sum + (r.rowCount || 0), 0),
     });
