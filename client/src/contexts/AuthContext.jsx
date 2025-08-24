@@ -7,7 +7,6 @@ import React, {
   useEffect,
 } from "react";
 import PropTypes from "prop-types";
-import api from "../services/api";
 
 /**
  * @typedef {object} User
@@ -25,9 +24,11 @@ import api from "../services/api";
  * @typedef {object} LoginResponse
  * @property {string} status - Response status ("success" | "error")
  * @property {string} [message] - Response message
- * @property {User} user - User data
- * @property {string} [accessToken] - Access token
- * @property {string} [token] - Authentication token
+ * @property {object} data - Response data object
+ * @property {User} data.user - User data
+ * @property {string} data.accessToken - Access token
+ * @property {string} data.refreshToken - Refresh token
+ * @property {number} data.expiresIn - Token expiration time
  */
 
 /**
@@ -53,6 +54,7 @@ import api from "../services/api";
  * @property {() => Promise<void>} logout - Function to log out current user
  * @property {() => Promise<void>} checkAuth - Function to verify authentication status
  * @property {() => void} clearError - Function to clear current error
+ * @property {() => Promise<string|null>} refreshToken - Function to refresh access token
  */
 
 /** @type {AuthContextType} */
@@ -71,6 +73,9 @@ const defaultContext = {
     throw new Error("AuthContext not initialized");
   },
   clearError: () => {
+    throw new Error("AuthContext not initialized");
+  },
+  refreshToken: async () => {
     throw new Error("AuthContext not initialized");
   },
 };
@@ -96,7 +101,101 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /**
-   * Login function with enhanced error handling and API response compatibility
+   * Logout function - defined before refreshToken to avoid dependency issues
+   * @returns {Promise<void>}
+   */
+  const logout = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      console.log("🚀 AuthContext: Logging out user");
+
+      const accessToken =
+        localStorage.getItem("accessToken") || localStorage.getItem("token");
+      if (accessToken) {
+        try {
+          // Direct API call for logout
+          await fetch(`${process.env.REACT_APP_API_URL}/api/v1/auth/logout`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+          console.log("✅ AuthContext: Logout API call successful");
+        } catch (logoutError) {
+          console.warn(
+            "⚠️ AuthContext: Logout API call failed (continuing anyway):",
+            logoutError
+          );
+          // Continue with logout even if API call fails
+        }
+      }
+    } catch (error) {
+      console.error("❌ AuthContext: Logout error:", error);
+    } finally {
+      // Always clean up local state and storage
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("token"); // Backward compatibility
+      localStorage.removeItem("user");
+      localStorage.removeItem("rememberedEmail");
+      localStorage.removeItem("rememberedUsername");
+
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+
+      console.log("✅ AuthContext: Logout cleanup complete");
+    }
+  }, []);
+
+  /**
+   * Token refresh function
+   * @returns {Promise<string|null>}
+   */
+  const refreshToken = useCallback(async () => {
+    const refresh = localStorage.getItem("refreshToken");
+    if (!refresh) return null;
+
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/v1/auth/refresh-token`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken: refresh }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.status === "success" && data.data) {
+        const { accessToken, refreshToken: newRefreshToken } = data.data;
+
+        localStorage.setItem("accessToken", accessToken);
+        localStorage.setItem("token", accessToken); // Backward compatibility
+        if (newRefreshToken) {
+          localStorage.setItem("refreshToken", newRefreshToken);
+        }
+
+        return accessToken;
+      } else {
+        // Refresh failed, logout user
+        await logout();
+        return null;
+      }
+    } catch (error) {
+      console.error("Token refresh error:", error);
+      await logout();
+      return null;
+    }
+  }, [logout]);
+
+  /**
+   * Login function with FIXED response handling for production backend
    * @param {LoginCredentials} credentials
    * @returns {Promise<User>}
    */
@@ -117,47 +216,49 @@ export const AuthProvider = ({ children }) => {
           hasPassword: !!credentials.password,
         });
 
-        const response = await api.auth.login(
-          credentials.email,
-          credentials.password
+        // Direct API call to match backend response format
+        const response = await fetch(
+          `${process.env.REACT_APP_API_URL}/api/v1/auth/login`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          }
         );
 
-        console.log("✅ AuthContext: Login API response:", response);
+        // Parse JSON response
+        const data = await response.json();
 
-        // Handle different possible response structures
-        let responseData = response;
+        console.log("✅ AuthContext: Login API response:", data);
 
-        // If response has a data property, use that
-        if (response.data) {
-          responseData = response.data;
+        // Handle HTTP errors first
+        if (!response.ok) {
+          const errorMessage =
+            data.message || `HTTP error! status: ${response.status}`;
+          throw new Error(errorMessage);
         }
 
-        // If responseData has another data property (nested structure), use that
-        if (responseData.data) {
-          responseData = responseData.data;
-        }
-
-        console.log("📋 AuthContext: Processed response data:", {
-          status: responseData.status,
-          hasUser: !!responseData.user,
-          hasToken: !!(responseData.accessToken || responseData.token),
-        });
-
-        // Check for successful response
-        if (responseData.status === "success" && responseData.user) {
-          const userData = responseData.user;
-          const token = responseData.accessToken || responseData.token;
+        // Handle the actual backend response format
+        if (data.status === "success" && data.data) {
+          const { user: userData, accessToken, refreshToken } = data.data;
 
           if (!userData) {
             throw new Error("User data not received from server");
           }
 
-          if (!token) {
+          if (!accessToken) {
             throw new Error("Authentication token not received from server");
           }
 
-          // Store token and user data
-          localStorage.setItem("token", token);
+          // Store both tokens with correct names
+          localStorage.setItem("accessToken", accessToken);
+          localStorage.setItem("refreshToken", refreshToken || "");
+          localStorage.setItem("token", accessToken); // Keep backward compatibility
           localStorage.setItem("user", JSON.stringify(userData));
 
           setUser(userData);
@@ -166,12 +267,13 @@ export const AuthProvider = ({ children }) => {
             id: userData.id,
             email: userData.email,
             role: userData.role,
+            username: userData.username,
           });
 
           return userData;
         } else {
           throw new Error(
-            responseData.message || "Login failed - invalid response format"
+            data.message || "Login failed - invalid response format"
           );
         }
       } catch (err) {
@@ -187,19 +289,27 @@ export const AuthProvider = ({ children }) => {
           message = err;
         }
 
-        // Handle specific error cases
+        // Handle specific error cases with better messages
         if (
-          message.includes("401") ||
-          message.includes("Invalid credentials")
+          message.includes("Invalid credentials") ||
+          message.includes("401")
         ) {
           message = "Invalid email or password. Please try again.";
-        } else if (message.includes("403")) {
-          message = "Access denied. Please verify your email address.";
+        } else if (
+          message.includes("verify your email") ||
+          message.includes("403")
+        ) {
+          message = "Please verify your email address before logging in.";
         } else if (message.includes("429")) {
           message = "Too many login attempts. Please try again later.";
-        } else if (message.includes("Network") || message.includes("fetch")) {
+        } else if (
+          message.includes("Failed to fetch") ||
+          message.includes("Network")
+        ) {
           message =
             "Network error. Please check your connection and try again.";
+        } else if (message.includes("account is locked")) {
+          message = "Account is temporarily locked. Please try again later.";
         }
 
         setError(message);
@@ -212,54 +322,15 @@ export const AuthProvider = ({ children }) => {
   );
 
   /**
-   * Handles user logout with enhanced cleanup
-   * @returns {Promise<void>}
-   */
-  const logout = useCallback(async () => {
-    try {
-      setIsLoading(true);
-
-      console.log("🚀 AuthContext: Logging out user");
-
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          await api.auth.logout();
-          console.log("✅ AuthContext: Logout API call successful");
-        } catch (logoutError) {
-          console.warn(
-            "⚠️ AuthContext: Logout API call failed (continuing anyway):",
-            logoutError
-          );
-          // Continue with logout even if API call fails
-        }
-      }
-    } catch (error) {
-      console.error("❌ AuthContext: Logout error:", error);
-    } finally {
-      // Always clean up local state and storage
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      localStorage.removeItem("rememberedEmail");
-      localStorage.removeItem("rememberedUsername");
-
-      setUser(null);
-      setError(null);
-      setIsLoading(false);
-
-      console.log("✅ AuthContext: Logout cleanup complete");
-    }
-  }, []);
-
-  /**
-   * Verifies current authentication status with backend response compatibility
+   * Verifies current authentication status with FIXED backend compatibility
    * @returns {Promise<void>}
    */
   const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const accessToken =
+      localStorage.getItem("accessToken") || localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
 
-    if (!token) {
+    if (!accessToken) {
       console.log("🔍 AuthContext: No token found, user not authenticated");
       setUser(null);
       return;
@@ -270,31 +341,30 @@ export const AuthProvider = ({ children }) => {
 
       console.log("🔍 AuthContext: Verifying authentication with backend");
 
-      const response = await api.auth.verify();
+      // Direct API call for verification
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/v1/auth/verify-auth`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      console.log("✅ AuthContext: Verify API response:", response);
+      const data = await response.json();
 
-      // Handle different possible response structures
-      let responseData = response;
-
-      // If response has a data property, use that
-      if (response.data) {
-        responseData = response.data;
-      }
-
-      console.log("📋 AuthContext: Processed verify data:", {
-        status: responseData.status,
-        authenticated: responseData.authenticated,
-        hasUser: !!responseData.user,
-      });
+      console.log("✅ AuthContext: Verify API response:", data);
 
       // Handle backend verify response structure
       if (
-        responseData.status === "success" &&
-        responseData.authenticated &&
-        responseData.user
+        response.ok &&
+        data.status === "success" &&
+        data.authenticated &&
+        data.user
       ) {
-        const userData = responseData.user;
+        const userData = data.user;
         setUser(userData);
 
         // Update stored user data
@@ -324,12 +394,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Clean up invalid authentication
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       setUser(null);
 
       // Don't set error for auth verification failures during initialization
-      if (err?.response?.status !== 401) {
+      if (!err?.message?.includes("401") && !err?.message?.includes("403")) {
         console.error(
           "❌ AuthContext: Unexpected error during auth verification:",
           err
@@ -369,6 +441,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     checkAuth,
     clearError,
+    refreshToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
