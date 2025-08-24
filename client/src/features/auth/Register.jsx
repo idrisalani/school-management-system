@@ -376,26 +376,42 @@ const Register = () => {
         }
       }
 
-      // Create username as firstname.lastname (NEW FORMAT)
-      const username = `${formData.firstName.trim().toLowerCase()}.${formData.lastName.trim().toLowerCase()}`;
+      // ENHANCED: Debug the form data before sending
+      console.log("📝 Form data before processing:", {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password ? "***" : "MISSING",
+        confirmPassword: formData.confirmPassword ? "***" : "MISSING",
+        role: formData.role,
+        hasConfirmPassword: !!formData.confirmPassword,
+        passwordsMatch: formData.password === formData.confirmPassword,
+      });
 
-      // Prepare registration data for PostgreSQL backend
-      /** @type {RegisterData} */
+      // Create the registration data object
       const registrationData = {
-        username: username,
+        // Use name instead of username to match your backend
+        name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
-        confirmPassword: formData.confirmPassword, // ✅ ADD THIS LINE
+        confirmPassword: formData.confirmPassword, // ✅ ENSURE THIS IS INCLUDED
         role: formData.role,
       };
 
-      console.log("🚀 Submitting registration:", {
-        username: registrationData.username, // NEW: Show the john.smith format
-        email: registrationData.email,
-        role: registrationData.role,
+      // ENHANCED: Debug the request data
+      console.log("🚀 Sending registration data:", {
+        ...registrationData,
+        password: "***",
+        confirmPassword: registrationData.confirmPassword ? "***" : "MISSING",
       });
+
+      console.log(
+        "📊 Request size check:",
+        JSON.stringify(registrationData).length,
+        "characters"
+      );
 
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/api/v1/auth/register`,
@@ -410,51 +426,37 @@ const Register = () => {
         }
       );
 
+      console.log("📡 Response status:", response.status);
+
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         throw new Error("Server error - please try again later");
       }
 
       const data = await response.json();
+      console.log("📥 Response data:", data);
 
       if (!response.ok) {
-        // Handle specific PostgreSQL/backend errors
-        if (response.status === 409) {
-          if (data.message?.includes("email")) {
-            setErrors((prev) => ({
-              ...prev,
-              email: "Email address is already registered",
-            }));
-          } else if (data.message?.includes("name combination")) {
-            setErrors((prev) => ({
-              ...prev,
-              firstName:
-                "This name combination is already taken. Please try a different name.",
-            }));
-          } else {
-            setErrors((prev) => ({
-              ...prev,
-              submit: data.message || "User already exists",
-            }));
-          }
-        } else if (response.status === 400) {
-          // Handle validation errors from express-validator
-          if (data.errors && Array.isArray(data.errors)) {
-            const validationErrors = {};
+        // Handle validation errors from backend
+        if (response.status === 400 && data.errors) {
+          const validationErrors = {};
+
+          // Handle both array and object format errors
+          if (Array.isArray(data.errors)) {
             data.errors.forEach((error) => {
-              const field = error.path || error.param;
+              const field = error.field || error.path || error.param;
               if (field) {
-                validationErrors[field] = error.msg || error.message;
+                validationErrors[field] = error.message || error.msg;
               }
             });
-            setErrors((prev) => ({ ...prev, ...validationErrors }));
-          } else {
-            setErrors((prev) => ({
-              ...prev,
-              submit: data.message || "Invalid registration data",
-            }));
+          } else if (typeof data.errors === "object") {
+            Object.assign(validationErrors, data.errors);
           }
+
+          console.error("❌ Validation errors:", validationErrors);
+          setErrors((prev) => ({ ...prev, ...validationErrors }));
         } else {
+          console.error("❌ Registration failed:", data);
           setErrors((prev) => ({
             ...prev,
             submit: data.message || "Registration failed",
@@ -464,39 +466,25 @@ const Register = () => {
       }
 
       console.log("✅ Registration successful:", data);
-      console.log("🎯 New username created:", data.data?.user?.username);
 
-      // Store token if provided in the new response format
+      // Store token if provided
       if (data.data?.token) {
         localStorage.setItem("token", data.data.token);
         localStorage.setItem("user", JSON.stringify(data.data.user));
       }
 
-      // FIXED: Store email before resetting form data
-      setRegisteredEmail(formData.email); // Store the email before reset
+      // Store email before resetting form
+      setRegisteredEmail(formData.email);
 
       // Success - clear saved form data and show success
       localStorage.removeItem("registrationForm");
-      setFormData(initialFormData); // Reset form data
-      setShowSuccessModal(true); // Show modal
+      setFormData(initialFormData);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error("❌ Registration error:", error);
-
-      // Handle different types of errors
-      if (
-        error.message.includes("Failed to fetch") ||
-        error.message.includes("fetch")
-      ) {
-        setErrors({
-          submit: "Network error - please check your connection and try again",
-        });
-      } else if (error.message.includes("CORS")) {
-        setErrors({ submit: "Connection error - please contact support" });
-      } else {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to register";
-        setErrors((prev) => ({ ...prev, submit: errorMessage }));
-      }
+      setErrors({
+        submit: error.message || "Registration failed - please try again",
+      });
     } finally {
       setIsLoading(false);
     }
