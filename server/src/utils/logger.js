@@ -397,10 +397,3 @@ process.on("uncaughtException", (error) => {
 
 // 🔧 CRITICAL FIX: Export both ES6 and CommonJS compatible
 export default logger;
-
-// 🔧 ADDED: CommonJS compatibility for require() usage
-module.exports = logger;
-module.exports.default = logger;
-module.exports.logUtils = logUtils;
-module.exports.requestLogger = requestLogger;
-module.exports.errorLogger = errorLogger;
