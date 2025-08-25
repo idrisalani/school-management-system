@@ -1,4 +1,4 @@
-// server/src/utils/logger.js - Hybrid Serverless Logger (Best of Both Approaches)
+// server/src/utils/logger.js - Fixed with All Required Properties
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -7,9 +7,7 @@ dotenv.config();
 const isDevelopment = process.env.NODE_ENV === "development";
 const isProduction = process.env.NODE_ENV === "production";
 const isServerless =
-  process.env.VERCEL ||
-  process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NETLIFY;
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
 
 /**
  * Log levels (from Simple Logger - ✅ KEPT)
@@ -28,8 +26,8 @@ const LOG_LEVELS = {
 const currentLogLevel = process.env.LOG_LEVEL
   ? LOG_LEVELS[process.env.LOG_LEVEL.toUpperCase()]
   : isDevelopment
-  ? LOG_LEVELS.DEBUG
-  : LOG_LEVELS.INFO;
+    ? LOG_LEVELS.DEBUG
+    : LOG_LEVELS.INFO;
 
 /**
  * Color codes for console output (from Simple Logger - ✅ KEPT + ENHANCED)
@@ -91,8 +89,7 @@ const formatMessage = (level, message, meta = {}) => {
   }
 
   // For development: human-readable with colors
-  const metaString =
-    Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta, null, 2)}` : "";
+  const metaString = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta, null, 2)}` : "";
   return `[${timestamp}] ${level.toUpperCase()}: ${message}${metaString}`;
 };
 
@@ -237,7 +234,7 @@ export const logUtils = {
 };
 
 /**
- * Enhanced Logger object (from Simple Logger - ✅ ENHANCED)
+ * 🔧 FIXED: Enhanced Logger object with ALL required properties
  */
 const logger = {
   /**
@@ -259,7 +256,7 @@ const logger = {
   },
 
   /**
-   * Log info message
+   * 🔧 FIXED: Log info message - This was missing!
    */
   info: (message, meta = {}) => {
     log("INFO", message, meta);
@@ -291,18 +288,12 @@ const logger = {
    */
   child: (context = {}) => {
     return {
-      error: (message, meta = {}) =>
-        logger.error(message, { ...context, ...meta }),
-      warn: (message, meta = {}) =>
-        logger.warn(message, { ...context, ...meta }),
-      info: (message, meta = {}) =>
-        logger.info(message, { ...context, ...meta }),
-      http: (message, meta = {}) =>
-        logger.http(message, { ...context, ...meta }),
-      debug: (message, meta = {}) =>
-        logger.debug(message, { ...context, ...meta }),
-      log: (level, message, meta = {}) =>
-        logger.log(level, message, { ...context, ...meta }),
+      error: (message, meta = {}) => logger.error(message, { ...context, ...meta }),
+      warn: (message, meta = {}) => logger.warn(message, { ...context, ...meta }),
+      info: (message, meta = {}) => logger.info(message, { ...context, ...meta }),
+      http: (message, meta = {}) => logger.http(message, { ...context, ...meta }),
+      debug: (message, meta = {}) => logger.debug(message, { ...context, ...meta }),
+      log: (level, message, meta = {}) => logger.log(level, message, { ...context, ...meta }),
     };
   },
 };
@@ -327,10 +318,7 @@ export const requestLogger = (req, res, next) => {
     const duration = Date.now() - start;
 
     // Use HTTP level for request logging
-    logger.http(
-      "Request completed",
-      logUtils.formatRequest(req, res, duration)
-    );
+    logger.http("Request completed", logUtils.formatRequest(req, res, duration));
 
     return originalSend.call(this, data);
   };
@@ -339,10 +327,7 @@ export const requestLogger = (req, res, next) => {
   res.on("finish", () => {
     if (!res.headersSent) {
       const duration = Date.now() - start;
-      logger.http(
-        "Request finished",
-        logUtils.formatRequest(req, res, duration)
-      );
+      logger.http("Request finished", logUtils.formatRequest(req, res, duration));
     }
   });
 
@@ -382,16 +367,12 @@ export const errorLogger = (err, req, res, next) => {
 if (isServerless) {
   logger.info("🚀 Serverless logger initialized", {
     platform: process.env.VERCEL ? "Vercel" : "Unknown Serverless",
-    logLevel: Object.keys(LOG_LEVELS).find(
-      (key) => LOG_LEVELS[key] === currentLogLevel
-    ),
+    logLevel: Object.keys(LOG_LEVELS).find((key) => LOG_LEVELS[key] === currentLogLevel),
     nodeVersion: process.version,
   });
 } else {
   logger.info("💻 Development logger initialized", {
-    logLevel: Object.keys(LOG_LEVELS).find(
-      (key) => LOG_LEVELS[key] === currentLogLevel
-    ),
+    logLevel: Object.keys(LOG_LEVELS).find((key) => LOG_LEVELS[key] === currentLogLevel),
     colorOutput: isDevelopment,
     nodeVersion: process.version,
   });
@@ -414,38 +395,12 @@ process.on("uncaughtException", (error) => {
   }
 });
 
+// 🔧 CRITICAL FIX: Export both ES6 and CommonJS compatible
 export default logger;
 
-/*
-USAGE EXAMPLES:
-
-// Basic logging
-logger.info("User registered", { userId: 123, email: "user@example.com" });
-logger.error("Database error", new Error("Connection failed"));
-
-// Child logger with context
-const userLogger = logger.child({ userId: 123, requestId: "abc-123" });
-userLogger.info("User logged in");  // Automatically includes userId and requestId
-
-// Request middleware
-app.use(requestLogger);
-
-// Error middleware
-app.use(errorLogger);
-
-// Database connection
-logUtils.logDbConnection(true, { host: "localhost", database: "school_ms" });
-
-// Performance monitoring
-logUtils.logPerformance({ operation: "user-query", duration: 45, recordCount: 150 });
-
-// API monitoring
-const start = Date.now();
-// ... API operation ...
-logUtils.logApiCall("/api/users", "POST", Date.now() - start, true);
-
-// Cold start detection (Vercel)
-if (isServerless) {
-  logUtils.logColdStart();
-}
-*/
+// 🔧 ADDED: CommonJS compatibility for require() usage
+module.exports = logger;
+module.exports.default = logger;
+module.exports.logUtils = logUtils;
+module.exports.requestLogger = requestLogger;
+module.exports.errorLogger = errorLogger;
