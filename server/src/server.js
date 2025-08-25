@@ -8,11 +8,7 @@ import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 
 // 🔧 ENHANCED COMPONENTS INTEGRATION
-import logger, {
-  requestLogger,
-  errorLogger,
-  logUtils,
-} from "./utils/logger.js";
+import logger, { requestLogger, errorLogger, logUtils } from "./utils/logger.js";
 import {
   healthCheck,
   getDatabaseStatus,
@@ -22,11 +18,7 @@ import {
 } from "./config/database.js";
 
 // 🛡️ MIDDLEWARE IMPORTS - FIXED IMPORTS
-import {
-  authenticate,
-  authorize,
-  requireAdmin,
-} from "./middleware/auth.middleware.js";
+import { authenticate, authorize, requireAdmin } from "./middleware/auth.middleware.js";
 import { handleValidationErrors } from "./utils/validators.js";
 
 // 📍 ROUTE IMPORTS - FIXED ROUTE NAMES
@@ -102,6 +94,7 @@ const corsOptions = {
     "http://localhost:3000",
     "http://localhost:3001",
     "https://school-management-frontend-flax.vercel.app",
+    "https://school-management-backend-sandy.vercel.app",
     process.env.CLIENT_URL,
     process.env.FRONTEND_URL,
     process.env.CORS_ORIGIN,
@@ -361,10 +354,7 @@ app.get("/api/v1/notifications", authenticate(), async (req, res) => {
 
     // FIXED: Proper type conversion for query parameters
     const page = parseInt(safeString(req.query.page, "1")) || 1;
-    const limit = Math.min(
-      parseInt(safeString(req.query.limit, "20")) || 20,
-      100
-    );
+    const limit = Math.min(parseInt(safeString(req.query.limit, "20")) || 20, 100);
     const type = safeString(req.query.type);
     const read = safeString(req.query.read, "false") === "true";
     const notifications = [];
@@ -590,9 +580,7 @@ const startServer = async () => {
     // Initialize database connection and schema
     const dbInitialized = await initializeDatabase();
     if (!dbInitialized) {
-      serverLogger.warn(
-        "Database initialization failed, but server will continue"
-      );
+      serverLogger.warn("Database initialization failed, but server will continue");
     }
 
     // Start listening
@@ -600,9 +588,7 @@ const startServer = async () => {
       serverLogger.info("🌟 School Management System API is running", {
         port: PORT,
         environment: process.env.NODE_ENV || "development",
-        database: process.env.DATABASE_URL
-          ? "PostgreSQL (Supabase)"
-          : "Not configured",
+        database: process.env.DATABASE_URL ? "PostgreSQL (Supabase)" : "Not configured",
         features: [
           "🔐 JWT Authentication + Token Blacklisting",
           "👥 Role-based Access Control (RBAC)",
