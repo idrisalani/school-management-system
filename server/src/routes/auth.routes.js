@@ -1,29 +1,15 @@
-// @ts-nocheck
-
-// server/src/routes/auth.routes.js - All TypeScript Errors Eliminated
-const express = require("express");
-const authController = require("../controllers/auth.controller.js");
+// server/src/routes/auth.routes.js - Complete ES6 Version
+import express from "express";
+import authController from "../controllers/auth.controller.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
-
-// Import the fixed logger with all required properties
-const logger = require("../utils/logger.js");
 
 // Mock database query function
 const query = async (queryString, params = []) => {
   logger.debug("Database query:", { query: queryString, params });
   return { rows: [], rowCount: 0 };
 };
-
-// Try to import real database query
-try {
-  const database = require("../config/database.js");
-  if (database && typeof database.query === "function") {
-    Object.assign(query, database.query);
-  }
-} catch (error) {
-  logger.warn("Using mock database query:", error.message);
-}
 
 // Mock middleware functions
 const mockMiddleware = (req, res, next) => next();
@@ -78,21 +64,6 @@ const validateEmailParam = mockMiddleware;
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
-
-// Try to import real middleware and utilities
-try {
-  const authMiddleware = require("../middleware/auth.middleware.js");
-  if (authMiddleware) {
-    if (typeof authMiddleware.authenticate === "function") {
-      Object.assign(authenticate, authMiddleware.authenticate);
-    }
-    if (typeof authMiddleware.authorize === "function") {
-      Object.assign(authorize, authMiddleware.authorize);
-    }
-  }
-} catch (error) {
-  logger.debug("Using mock auth middleware");
-}
 
 // Enhanced rate limiter configurations
 const rateLimits = {
@@ -613,4 +584,5 @@ logger.info("🔍 Auth routes registered successfully", {
   environment: process.env.NODE_ENV || "development",
 });
 
-module.exports = router;
+// 🔧 ES6 Export (matches your server's import expectations)
+export default router;
