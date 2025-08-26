@@ -1,12 +1,9 @@
 // @ts-check
 import React from "react";
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
 import PropTypes from "prop-types";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import ConnectionTest from "../components/tests/ConnectionTest.jsx";
-
-// Import layout components
-import MainLayout from "../components/layout/variations/MainLayout.jsx";
 
 // Import feature components
 import Login from "../features/auth/Login.jsx";
@@ -42,6 +39,15 @@ const ProtectedRoute = ({ isAuthenticated, children }) => {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
+};
+
+// Simple Layout Replacement - bypasses MainLayout
+const SimpleLayout = () => {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Outlet />
+    </div>
+  );
 };
 
 // Parent Routes Handler - NEW COMPONENT
@@ -110,11 +116,11 @@ const AppRoutes = () => {
       {/* Public Catch-all Route - Redirects to landing page */}
       <Route path="/unauthorized" element={<Navigate to="/" replace />} />
 
-      {/* Protected Routes */}
+      {/* Protected Routes - MODIFIED TO BYPASS MainLayout */}
       <Route
         element={
           <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <MainLayout />
+            <SimpleLayout />
           </ProtectedRoute>
         }
       >
