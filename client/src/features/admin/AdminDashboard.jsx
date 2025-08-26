@@ -1,5 +1,7 @@
 // src/features/admin/AdminDashboard.jsx
 import React, { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useNavigate } from "react-router-dom";
 
 // Simple Card components
 const Card = ({ children, className = "" }) => (
@@ -196,7 +198,9 @@ const RecentActivity = () => (
 );
 
 const AdminDashboard = () => {
-  // Fix: Initialize with proper object structure instead of null
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
   const [dashboardData, setDashboardData] = useState({
     studentCount: "",
     teacherCount: "",
@@ -204,6 +208,15 @@ const AdminDashboard = () => {
     revenue: "",
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -276,50 +289,74 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-        <p className="text-gray-600 mt-2">School Management System Overview</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header with Logout */}
+      <div className="bg-white shadow-sm border-b px-6 py-4 mb-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Admin Dashboard
+            </h1>
+            <p className="text-gray-600 mt-1">
+              School Management System Overview
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="text-sm font-medium text-gray-900">
+                {user?.firstName || user?.name || "Admin"}
+              </p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat) => (
-          <StatsCard key={stat.title} {...stat} loading={isLoading} />
-        ))}
-      </div>
+      <div className="p-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {stats.map((stat) => (
+            <StatsCard key={stat.title} {...stat} loading={isLoading} />
+          ))}
+        </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Attendance Trends</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AttendanceChart />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Academic Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PerformanceChart />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Attendance Trends</CardTitle>
+            <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <AttendanceChart />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Academic Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PerformanceChart />
+            <RecentActivity />
           </CardContent>
         </Card>
       </div>
-
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RecentActivity />
-        </CardContent>
-      </Card>
     </div>
   );
 };
