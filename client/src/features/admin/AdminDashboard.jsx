@@ -218,6 +218,23 @@ const AdminDashboard = () => {
     }
   };
 
+  // Extract user name properly
+  const getUserDisplayName = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    if (user?.firstName) {
+      return user.firstName;
+    }
+    if (user?.name) {
+      return user.name;
+    }
+    if (user?.username) {
+      return user.username;
+    }
+    return "Admin";
+  };
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -298,13 +315,14 @@ const AdminDashboard = () => {
               Admin Dashboard
             </h1>
             <p className="text-gray-600 mt-1">
-              School Management System Overview
+              Welcome back, {getUserDisplayName()}! School Management System
+              Overview
             </p>
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
-                {user?.firstName || user?.name || "Admin"}
+                {getUserDisplayName()}
               </p>
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
