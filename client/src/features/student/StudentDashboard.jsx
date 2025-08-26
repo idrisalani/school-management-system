@@ -3,6 +3,70 @@ import React from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useNavigate } from "react-router-dom";
 
+// SVG Icon Components
+const Icons = {
+  Clock: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  ),
+  Award: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+      />
+    </svg>
+  ),
+  FileText: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
+    </svg>
+  ),
+  Calendar: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+      />
+    </svg>
+  ),
+  Bell: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+      />
+    </svg>
+  ),
+  AlertTriangle: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      />
+    </svg>
+  ),
+};
+
 // Simple Card components
 const Card = ({ children, className = "" }) => (
   <div className={`bg-white shadow rounded-lg ${className}`}>{children}</div>
@@ -188,11 +252,13 @@ const StudentDashboard = () => {
     }
     return "Student";
   };
+
+  // Fixed quickStats with proper icon handling
   const quickStats = [
     {
       title: "Attendance",
       value: "92%",
-      icon: "🕒",
+      IconComponent: Icons.Clock,
       trend: "up",
       trendValue: "+2.5%",
       color: "blue",
@@ -200,7 +266,7 @@ const StudentDashboard = () => {
     {
       title: "Average Grade",
       value: "A-",
-      icon: "🏆",
+      IconComponent: Icons.Award,
       trend: "up",
       trendValue: "+3.2%",
       color: "green",
@@ -208,7 +274,7 @@ const StudentDashboard = () => {
     {
       title: "Assignments",
       value: "8/10",
-      icon: "📄",
+      IconComponent: Icons.FileText,
       trend: "down",
       trendValue: "-1",
       color: "orange",
@@ -216,7 +282,7 @@ const StudentDashboard = () => {
     {
       title: "Activities",
       value: "5",
-      icon: "📅",
+      IconComponent: Icons.Calendar,
       trend: "up",
       trendValue: "+2",
       color: "purple",
@@ -271,32 +337,38 @@ const StudentDashboard = () => {
       </div>
 
       <div className="p-6">
-        {/* Quick Stats */}
+        {/* Quick Stats - Fixed Icon Rendering */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg bg-${stat.color}-100`}>
-                    <span className="text-2xl">{stat.icon}</span>
+          {quickStats.map((stat, index) => {
+            const IconComponent = stat.IconComponent;
+            return (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className={`p-2 rounded-lg bg-${stat.color}-100`}>
+                      <IconComponent
+                        className="h-6 w-6"
+                        color={`text-${stat.color}-600`}
+                      />
+                    </div>
+                    <div
+                      className={`flex items-center space-x-1 text-sm ${
+                        stat.trend === "up" ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      <span>{stat.trendValue}</span>
+                    </div>
                   </div>
-                  <div
-                    className={`flex items-center space-x-1 text-sm ${
-                      stat.trend === "up" ? "text-green-600" : "text-red-600"
-                    }`}
-                  >
-                    <span>{stat.trendValue}</span>
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium text-gray-500">
+                      {stat.title}
+                    </h3>
+                    <p className="mt-2 text-3xl font-semibold">{stat.value}</p>
                   </div>
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-sm font-medium text-gray-500">
-                    {stat.title}
-                  </h3>
-                  <p className="mt-2 text-3xl font-semibold">{stat.value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Main Content */}
