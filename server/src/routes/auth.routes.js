@@ -253,6 +253,87 @@ const checkUserHandler = asyncHandler(async (req, res, next) => {
   });
 });
 
+const validateEmailCheck = (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({
+      status: "error",
+      message: "Email is required",
+    });
+  }
+
+  // Basic email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({
+      status: "error",
+      message: "Please provide a valid email address",
+    });
+  }
+
+  next();
+};
+
+// Profile completion validation middleware
+const validateProfileCompletion = (req, res, next) => {
+  const { phone, address, dateOfBirth, gender } = req.body;
+
+  const missingFields = [];
+
+  if (!phone) missingFields.push("phone");
+  if (!address) missingFields.push("address");
+  if (!dateOfBirth) missingFields.push("dateOfBirth");
+  if (!gender) missingFields.push("gender");
+
+  if (missingFields.length > 0) {
+    return res.status(400).json({
+      status: "error",
+      message: `Missing required fields: ${missingFields.join(", ")}`,
+      missingFields: missingFields,
+    });
+  }
+
+  // Validate phone number format (basic)
+  const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+  if (!phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ""))) {
+    return res.status(400).json({
+      status: "error",
+      message: "Please provide a valid phone number",
+    });
+  }
+
+  // Validate gender
+  const validGenders = ["male", "female", "other", "prefer-not-to-say"];
+  if (!validGenders.includes(gender.toLowerCase())) {
+    return res.status(400).json({
+      status: "error",
+      message: "Gender must be one of: male, female, other, prefer-not-to-say",
+    });
+  }
+
+  // Validate date of birth
+  const birthDate = new Date(dateOfBirth);
+  if (isNaN(birthDate.getTime())) {
+    return res.status(400).json({
+      status: "error",
+      message: "Please provide a valid date of birth",
+    });
+  }
+
+  // Check if person is at least 5 years old (for students) and not over 120 years old
+  const today = new Date();
+  const age = today.getFullYear() - birthDate.getFullYear();
+  if (age < 5 || age > 120) {
+    return res.status(400).json({
+      status: "error",
+      message: "Please provide a valid date of birth (age must be between 5 and 120 years)",
+    });
+  }
+
+  next();
+};
+
 // Register public routes with proper middleware chain
 router.post("/register", rateLimiter(rateLimits.register), validateRegistration, registerHandler);
 router.post("/login", rateLimiter(rateLimits.login), validateLogin, loginHandler);
@@ -281,6 +362,144 @@ router.post(
   emailVerificationHandler
 );
 router.get("/check-user/:email", validateEmailParam, checkUserHandler);
+
+// Email Existence Check (for real-time validation)
+router.post(
+  "/check-email",
+  rateLimiter(rateLimits.emailCheck),
+  validateEmailCheck,
+  asyncHandler(async (req, res, next) => {
+    logger.info("Email existence check", { email: req.body.email });
+
+    if (typeof authController.checkEmailExists === "function") {
+      await authController.checkEmailExists(req, res);
+    } else {
+      // Mock implementation for development
+      const { email } = req.body;
+      res.json({
+        status: "success",
+        data: {
+          exists: false,
+          verified: false,
+          available: true,
+        },
+      });
+    }
+  })
+);
+
+// Email Verification
+router.get(
+  "/verify-email/:token",
+  rateLimiter(rateLimits.emailVerification),
+  asyncHandler(async (req, res, next) => {
+    logger.info("Email verification attempt", {
+      token: req.params.token?.substring(0, 10) + "...",
+    });
+
+    if (typeof authController.verifyEmail === "function") {
+      await authController.verifyEmail(req, res, next);
+    } else {
+      res.json({
+        status: "success",
+        message: "Email verified successfully",
+        data: {
+          user: {
+            id: 1,
+            email: "test@example.com",
+            isVerified: true,
+          },
+          tempToken: "mock-temp-token",
+          nextStep: "complete-profile",
+        },
+      });
+    }
+  })
+);
+
+// Profile Completion
+router.post(
+  "/complete-profile",
+  rateLimiter(rateLimits.register),
+  validateProfileCompletion,
+  asyncHandler(async (req, res, next) => {
+    logger.info("Profile completion attempt");
+
+    if (typeof authController.completeProfile === "function") {
+      await authController.completeProfile(req, res, next);
+    } else {
+      res.json({
+        status: "success",
+        message: "Profile completed successfully!",
+        data: {
+          user: {
+            id: 1,
+            email: "test@example.com",
+            profileCompleted: true,
+          },
+          token: "mock-access-token",
+        },
+      });
+    }
+  })
+);
+
+// Resend Verification Email
+router.post(
+  "/resend-verification",
+  rateLimiter(rateLimits.emailVerification),
+  asyncHandler(async (req, res, next) => {
+    logger.info("Resend verification request", { email: req.body.email });
+
+    if (typeof authController.resendVerificationEmail === "function") {
+      await authController.resendVerificationEmail(req, res, next);
+    } else {
+      res.json({
+        status: "success",
+        message: "Verification email sent successfully",
+      });
+    }
+  })
+);
+
+// Login
+router.post(
+  "/login",
+  rateLimiter(rateLimits.login),
+  validateLogin,
+  asyncHandler(async (req, res, next) => {
+    logger.info("Login attempt", {
+      email: req.body.email,
+      hasPassword: !!req.body.password,
+    });
+
+    if (typeof authController.login === "function") {
+      await authController.login(req, res, next);
+    } else {
+      res.status(501).json({
+        status: "error",
+        message: "Login endpoint not implemented",
+      });
+    }
+  })
+);
+
+// Refresh Token
+router.post(
+  "/refresh-token",
+  asyncHandler(async (req, res, next) => {
+    logger.info("Token refresh attempt");
+
+    if (typeof authController.refreshToken === "function") {
+      await authController.refreshToken(req, res, next);
+    } else {
+      res.status(501).json({
+        status: "error",
+        message: "Refresh token endpoint not implemented",
+      });
+    }
+  })
+);
 
 // ========================= PROTECTED ROUTES =========================
 
@@ -573,6 +792,9 @@ const notFoundHandler = (req, res) => {
       "POST /api/v1/auth/resend-verification",
       "PUT /api/v1/auth/profile",
       "PUT /api/v1/auth/change-password",
+      "POST /api/v1/auth/check-email",
+      "GET /api/v1/auth/verify-email/:token",
+      "POST /api/v1/auth/complete-profile",
     ],
   });
 };

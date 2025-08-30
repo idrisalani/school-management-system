@@ -35,10 +35,7 @@ class EmailService {
       }
 
       // Strategy 2: Development mode (console logging)
-      if (
-        process.env.NODE_ENV === "development" ||
-        process.env.NODE_ENV === "dev"
-      ) {
+      if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev") {
         this.initializeDevelopmentMode();
         return;
       }
@@ -46,10 +43,7 @@ class EmailService {
       // Strategy 3: Mock mode (always works, logs instead of sending)
       this.initializeMockMode();
     } catch (error) {
-      logger.error(
-        "Email service initialization failed, falling back to mock mode:",
-        error
-      );
+      logger.error("Email service initialization failed, falling back to mock mode:", error);
       this.initializeMockMode();
     }
   }
@@ -64,10 +58,7 @@ class EmailService {
       secure: (process.env.SMTP_SECURE || process.env.EMAIL_SECURE) === "true",
       user: process.env.SMTP_USER || process.env.EMAIL_USER,
       pass: process.env.SMTP_PASS || process.env.EMAIL_PASS,
-      from:
-        process.env.EMAIL_FROM ||
-        process.env.SMTP_FROM ||
-        process.env.FROM_EMAIL,
+      from: process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.FROM_EMAIL,
       service: process.env.EMAIL_SERVICE || process.env.SMTP_SERVICE,
     };
   }
@@ -105,20 +96,14 @@ class EmailService {
       this.isConfigured = true;
       this.mode = "production";
 
-      logger.info(
-        "📧 Email service initialized successfully (Production SMTP)",
-        {
-          host: config.host || config.service,
-          port: config.port,
-          secure: config.secure,
-          user: config.user?.substring(0, 3) + "***", // Mask email for security
-        }
-      );
+      logger.info("📧 Email service initialized successfully (Production SMTP)", {
+        host: config.host || config.service,
+        port: config.port,
+        secure: config.secure,
+        user: config.user?.substring(0, 3) + "***", // Mask email for security
+      });
     } catch (error) {
-      logger.warn(
-        "Production SMTP failed, falling back to development mode:",
-        error.message
-      );
+      logger.warn("Production SMTP failed, falling back to development mode:", error.message);
       this.initializeDevelopmentMode();
     }
   }
@@ -136,9 +121,7 @@ class EmailService {
     this.isConfigured = true;
     this.mode = "development";
 
-    logger.info(
-      "📧 Email service initialized (Development Mode - Console Logging)"
-    );
+    logger.info("📧 Email service initialized (Development Mode - Console Logging)");
   }
 
   /**
@@ -159,9 +142,7 @@ class EmailService {
 
         // Return proper SentMessageInfo structure
         return {
-          messageId: `mock-${Date.now()}-${Math.random()
-            .toString(36)
-            .substr(2, 9)}`,
+          messageId: `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           envelope: {
             from: options.from || "noreply@schoolms.com",
             to: Array.isArray(options.to) ? options.to : [options.to],
@@ -192,15 +173,10 @@ class EmailService {
         await this.initializeTransporter();
       }
 
-      const { to, subject, text, html, from, replyTo, attachments, cc, bcc } =
-        options;
+      const { to, subject, text, html, from, replyTo, attachments, cc, bcc } = options;
 
       // Use configured default or fallback
-      const fromAddress =
-        from ||
-        this.config?.from ||
-        this.config?.user ||
-        "noreply@schoolms.com";
+      const fromAddress = from || this.config?.from || this.config?.user || "noreply@schoolms.com";
 
       const mailOptions = {
         from: fromAddress,
@@ -706,7 +682,364 @@ Stay secure: Never share this link with anyone else.
   }
 
   /**
-   * Send template email with validation
+   * Send email verification email with professional styling
+   * @param {Object} data - Email data
+   * @param {string} to - Recipient email
+   * @returns {Promise<Object>} Send result
+   */
+  async sendEmailVerificationEmail(data, to) {
+    const { verificationLink, name = "User", expirationTime = "24 hours" } = data;
+
+    const subject = "Verify Your Email Address - School Management System";
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Email Verification Required</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+          line-height: 1.6; 
+          color: #333333; 
+          background-color: #f8fafc;
+        }
+        .email-container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background-color: #ffffff;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header { 
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white; 
+          padding: 40px 30px; 
+          text-align: center; 
+        }
+        .header h1 { 
+          font-size: 24px; 
+          font-weight: 700; 
+          margin-bottom: 8px;
+        }
+        .content { 
+          padding: 40px 30px; 
+        }
+        .verify-button { 
+          display: inline-block; 
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white; 
+          text-decoration: none; 
+          padding: 16px 32px; 
+          border-radius: 8px; 
+          font-weight: 600;
+          font-size: 16px;
+          margin: 24px 0; 
+          transition: transform 0.2s ease;
+        }
+        .verify-button:hover { 
+          transform: translateY(-2px); 
+        }
+        .info-box { 
+          background-color: #eff6ff; 
+          border: 1px solid #93c5fd;
+          border-left: 4px solid #3b82f6;
+          padding: 20px; 
+          border-radius: 8px; 
+          margin: 24px 0; 
+        }
+        .info-box h3 { 
+          color: #1e40af; 
+          margin-bottom: 12px; 
+          font-size: 16px;
+        }
+        .info-box p { 
+          color: #1e40af; 
+          margin: 8px 0; 
+        }
+        .footer { 
+          background-color: #f7fafc; 
+          text-align: center; 
+          padding: 30px; 
+          border-top: 1px solid #e2e8f0;
+        }
+        .footer-text { 
+          color: #718096; 
+          font-size: 12px; 
+          line-height: 1.5;
+        }
+        .link { 
+          color: #10b981; 
+          text-decoration: none; 
+        }
+        .link:hover { 
+          text-decoration: underline; 
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="header">
+          <h1>Email Verification Required</h1>
+        </div>
+        
+        <div class="content">
+          <p>Hello ${name},</p>
+          
+          <p>Thank you for registering with our School Management System. To complete your account setup and ensure security, please verify your email address.</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${verificationLink}" class="verify-button">
+              Verify Email Address
+            </a>
+          </div>
+
+          <div class="info-box">
+            <h3>Why do we need email verification?</h3>
+            <p>• Ensures account security and prevents unauthorized access</p>
+            <p>• Allows us to send important notifications about your account</p>
+            <p>• Required for password recovery and system communications</p>
+            <p>• Helps us maintain the integrity of our user community</p>
+          </div>
+          
+          <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #10b981; font-family: monospace; font-size: 12px; background-color: #f0fdfa; padding: 8px; border-radius: 4px; margin: 12px 0;">
+            ${verificationLink}
+          </p>
+          
+          <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+            <strong>Note:</strong> This verification link will expire in ${expirationTime}. If the link expires, you can request a new verification email from the login page.
+          </p>
+          
+          <p>If you didn't create this account, you can safely ignore this email.</p>
+        </div>
+        
+        <div class="footer">
+          <div class="footer-text">
+            © ${new Date().getFullYear()} School Management System. All rights reserved.<br>
+            This is an automated security message, please do not reply to this email.
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+    const text = `
+Email Verification Required - School Management System
+
+Hello ${name},
+
+Thank you for registering with our School Management System. To complete your account setup and ensure security, please verify your email address.
+
+To verify your email, visit:
+${verificationLink}
+
+Why do we need email verification?
+• Ensures account security and prevents unauthorized access
+• Allows us to send important notifications about your account
+• Required for password recovery and system communications
+• Helps us maintain the integrity of our user community
+
+Note: This verification link will expire in ${expirationTime}. If the link expires, you can request a new verification email from the login page.
+
+If you didn't create this account, you can safely ignore this email.
+
+© ${new Date().getFullYear()} School Management System. All rights reserved.
+  `;
+
+    return this.sendEmail({
+      to,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * Send profile completion reminder email
+   * @param {Object} data - Email data
+   * @param {string} to - Recipient email
+   * @returns {Promise<Object>} Send result
+   */
+  async sendProfileCompletionEmail(data, to) {
+    const { completionLink, name = "User", role = "user" } = data;
+
+    const subject = "Complete Your Profile - School Management System";
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Complete Your Profile</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+          line-height: 1.6; 
+          color: #333333; 
+          background-color: #f8fafc;
+        }
+        .email-container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background-color: #ffffff;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header { 
+          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+          color: white; 
+          padding: 40px 30px; 
+          text-align: center; 
+        }
+        .header h1 { 
+          font-size: 24px; 
+          font-weight: 700; 
+          margin-bottom: 8px;
+        }
+        .content { 
+          padding: 40px 30px; 
+        }
+        .complete-button { 
+          display: inline-block; 
+          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+          color: white; 
+          text-decoration: none; 
+          padding: 16px 32px; 
+          border-radius: 8px; 
+          font-weight: 600;
+          font-size: 16px;
+          margin: 24px 0; 
+          transition: transform 0.2s ease;
+        }
+        .complete-button:hover { 
+          transform: translateY(-2px); 
+        }
+        .progress-box { 
+          background-color: #fef3c7; 
+          border: 1px solid #f59e0b;
+          border-left: 4px solid #d97706;
+          padding: 20px; 
+          border-radius: 8px; 
+          margin: 24px 0; 
+        }
+        .progress-box h3 { 
+          color: #92400e; 
+          margin-bottom: 12px; 
+          font-size: 16px;
+        }
+        .checklist { 
+          list-style: none; 
+          padding: 0; 
+        }
+        .checklist li { 
+          padding: 6px 0; 
+          color: #92400e;
+          position: relative;
+          padding-left: 24px;
+        }
+        .checklist li:before { 
+          content: "📝"; 
+          position: absolute;
+          left: 0;
+        }
+        .footer { 
+          background-color: #f7fafc; 
+          text-align: center; 
+          padding: 30px; 
+          border-top: 1px solid #e2e8f0;
+        }
+        .footer-text { 
+          color: #718096; 
+          font-size: 12px; 
+          line-height: 1.5;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="header">
+          <h1>Complete Your Profile</h1>
+        </div>
+        
+        <div class="content">
+          <p>Hello ${name},</p>
+          
+          <p>Great news! Your email has been successfully verified. Now let's complete your profile to get full access to the School Management System.</p>
+
+          <div class="progress-box">
+            <h3>Profile Completion Required</h3>
+            <p>As a <strong>${role}</strong>, you'll need to provide some additional information to complete your profile:</p>
+            <ul class="checklist">
+              <li>Personal contact information (phone, address)</li>
+              <li>Date of birth and basic details</li>
+              ${role === "student" ? "<li>Parent contact information</li><li>Grade level and emergency contact</li>" : ""}
+              ${role === "teacher" ? "<li>Department and qualifications</li><li>Professional information</li>" : ""}
+            </ul>
+          </div>
+          
+          <p>Click the button below to complete your profile and start using the system:</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${completionLink}" class="complete-button">
+              Complete My Profile
+            </a>
+          </div>
+          
+          <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #8b5cf6; font-family: monospace; font-size: 12px; background-color: #f5f3ff; padding: 8px; border-radius: 4px; margin: 12px 0;">
+            ${completionLink}
+          </p>
+          
+          <p>Once your profile is complete, you'll have full access to all system features and can start exploring everything the School Management System has to offer!</p>
+        </div>
+        
+        <div class="footer">
+          <div class="footer-text">
+            © ${new Date().getFullYear()} School Management System. All rights reserved.<br>
+            This is an automated message, please do not reply to this email.
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+    const text = `
+Complete Your Profile - School Management System
+
+Hello ${name},
+
+Great news! Your email has been successfully verified. Now let's complete your profile to get full access to the School Management System.
+
+As a ${role}, you'll need to provide some additional information:
+• Personal contact information (phone, address)
+• Date of birth and basic details
+${role === "student" ? "• Parent contact information\n• Grade level and emergency contact" : ""}
+${role === "teacher" ? "• Department and qualifications\n• Professional information" : ""}
+
+To complete your profile, visit:
+${completionLink}
+
+Once your profile is complete, you'll have full access to all system features!
+
+© ${new Date().getFullYear()} School Management System. All rights reserved.
+  `;
+
+    return this.sendEmail({
+      to,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * Send template email with validation (ENHANCED VERSION)
    * @param {string} template - Template name
    * @param {Object} data - Template data
    * @param {string} to - Recipient email
@@ -714,13 +1047,17 @@ Stay secure: Never share this link with anyone else.
    */
   async sendTemplate(template, data, to) {
     try {
-      // Validate template name
-      const supportedTemplates = ["welcomeEmail", "passwordReset"];
+      // Updated supported templates list
+      const supportedTemplates = [
+        "welcomeEmail",
+        "passwordReset",
+        "emailVerification",
+        "profileCompletion",
+      ];
+
       if (!supportedTemplates.includes(template)) {
         logger.error(
-          `Unknown email template: ${template}. Supported: ${supportedTemplates.join(
-            ", "
-          )}`
+          `Unknown email template: ${template}. Supported: ${supportedTemplates.join(", ")}`
         );
         return {
           success: false,
@@ -743,6 +1080,12 @@ Stay secure: Never share this link with anyone else.
 
         case "passwordReset":
           return this.sendPasswordResetEmail(data, to);
+
+        case "emailVerification":
+          return this.sendEmailVerificationEmail(data, to);
+
+        case "profileCompletion":
+          return this.sendProfileCompletionEmail(data, to);
 
         default:
           return {
@@ -774,9 +1117,7 @@ Stay secure: Never share this link with anyone else.
         <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9;">
           <p><strong>Service Mode:</strong> ${this.mode}</p>
           <p><strong>Time Sent:</strong> ${new Date().toISOString()}</p>
-          <p><strong>Email Configured:</strong> ${
-            this.isConfigured ? "✅ Yes" : "❌ No"
-          }</p>
+          <p><strong>Email Configured:</strong> ${this.isConfigured ? "✅ Yes" : "❌ No"}</p>
         </div>
         <p style="color: #059669; font-weight: bold;">✅ If you received this email, the email service is working correctly!</p>
       </div>
@@ -835,13 +1176,16 @@ Email Configured: ${this.isConfigured ? "Yes" : "No"}
         host: this.config?.host || "Not configured",
         port: this.config?.port || "Not configured",
         secure: this.config?.secure || false,
-        user: this.config?.user
-          ? this.config.user.substring(0, 3) + "***"
-          : "Not configured",
+        user: this.config?.user ? this.config.user.substring(0, 3) + "***" : "Not configured",
         from: this.config?.from || "Not configured",
         service: this.config?.service || "None",
       },
-      supportedTemplates: ["welcomeEmail", "passwordReset"],
+      supportedTemplates: [
+        "welcomeEmail",
+        "passwordReset",
+        "emailVerification",
+        "profileCompletion",
+      ],
       lastInitialized: new Date().toISOString(),
     };
   }

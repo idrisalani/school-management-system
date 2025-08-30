@@ -5,6 +5,14 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { query } from "../config/database.js";
 import logger from "../utils/logger.js";
+import sgMail from "@sendgrid/mail";
+
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  logger.info("SendGrid initialized successfully");
+} else {
+  logger.warn("SendGrid API key not found - email features will be mocked");
+}
 
 /**
  * @typedef {import('express').Request} ExpressRequest
@@ -222,16 +230,23 @@ class EmailService {
         getHtml: (data) => `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2563eb;">Email Verification Required</h2>
-            <p>Hi ${data.name},</p>
-            <p>Please verify your email address to activate your account:</p>
-            <a href="${data.verificationLink}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Verify Email Address
-            </a>
-            <p style="margin-top: 20px;">
-              If you didn't create this account, please ignore this email.
+            <p>Hi ${data.firstName || data.name},</p>
+            <p>Thank you for registering with our School Management System. Please verify your email address to activate your account:</p>
+            <div style="margin: 30px 0; text-align: center;">
+              <a href="${data.verificationLink}" style="background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                Verify Email Address
+              </a>
+            </div>
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 4px;">
+              <a href="${data.verificationLink}">${data.verificationLink}</a>
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+              This verification link will expire in ${data.expirationTime || "24 hours"}.
             </p>
             <hr style="margin: 30px 0;">
             <p style="color: #6b7280; font-size: 14px;">
+              If you didn't create this account, please ignore this email.<br>
               Need help? Contact us at <a href="mailto:${data.supportEmail}">${data.supportEmail}</a>
             </p>
           </div>
@@ -620,7 +635,7 @@ const formatUserResponse = (user) => ({
  */
 export const register = async (req, res, next) => {
   try {
-    logger.info("🚀 Registration attempt", {
+    logger.info("🚀 Registration attempt with email verification", {
       email: req.body.email,
       role: req.body.role,
       ip: req.ip,
@@ -639,10 +654,10 @@ export const register = async (req, res, next) => {
       address,
     } = req.body;
 
-    // Flexible name handling - support multiple input formats
+    // Keep your existing flexible name handling
     const fullName = name || username || `${firstName || ""} ${lastName || ""}`.trim();
 
-    // Comprehensive validation
+    // Keep all your existing comprehensive validation
     if (!email || !password || !fullName) {
       throw new ValidationError("Email, password, and name are required");
     }
@@ -665,13 +680,13 @@ export const register = async (req, res, next) => {
       throw new ValidationError("Please provide a valid phone number");
     }
 
-    // Validate role
+    // Keep your existing role validation
     const validRoles = ["student", "teacher", "admin", "parent"];
     if (!validRoles.includes(role)) {
       throw new ValidationError(`Role must be one of: ${validRoles.join(", ")}`);
     }
 
-    // Parse and generate names
+    // Keep your existing name parsing
     const {
       firstName: parsedFirstName,
       lastName: parsedLastName,
@@ -685,27 +700,74 @@ export const register = async (req, res, next) => {
       email: email.toLowerCase(),
     });
 
-    // Check for existing user by email
-    const existingUser = await query("SELECT id, email, username FROM users WHERE email = $1", [
-      email.toLowerCase(),
-    ]);
+    // Enhanced existing user check for email verification
+    const existingUser = await query(
+      "SELECT id, email, username, is_verified FROM users WHERE email = $1",
+      [email.toLowerCase()]
+    );
 
     if (existingUser.rows.length > 0) {
-      throw new ConflictError("Email address is already registered");
+      const user = existingUser.rows[0];
+      if (user.is_verified) {
+        throw new ConflictError("Email address is already registered and verified");
+      } else {
+        // User exists but not verified - resend verification
+        const verificationToken = generateVerificationToken(user.id);
+
+        // Update existing user with new token
+        await query(
+          `UPDATE users SET 
+           verification_token = $1, 
+           token_expiry = NOW() + INTERVAL '24 hours',
+           updated_at = NOW()
+           WHERE id = $2`,
+          [verificationToken, user.id]
+        );
+
+        // Resend verification email using your existing email system
+        setImmediate(async () => {
+          try {
+            await emailService.sendTemplate(
+              "emailVerification",
+              {
+                name: parsedFirstName || fullName,
+                verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${verificationToken}`,
+                supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
+              },
+              email.toLowerCase()
+            );
+            logger.info("📧 Verification email resent", { email: email.toLowerCase() });
+          } catch (emailError) {
+            logger.error("❌ Failed to resend verification email", {
+              email: email.toLowerCase(),
+              error: emailError.message,
+            });
+          }
+        });
+
+        res.status(200).json({
+          status: "success",
+          message: "Account exists but not verified. Verification email has been resent.",
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
-    // Enhanced password hashing
+    // Keep your existing password hashing
     logger.debug("🔐 Hashing password...");
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Insert new user with comprehensive data
+    // Generate verification token using your existing function
+    const verificationToken = generateVerificationToken(1); // Temporary user ID for token generation
+
+    // UPDATED: Insert new user with verification fields added to your existing query
     const result = await query(
       `INSERT INTO users (
         username, first_name, last_name, email, password, role, 
-        phone, address, date_of_birth, is_verified, status, 
-        login_attempts, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) 
+        phone, address, date_of_birth, is_verified, profile_completed, status, 
+        verification_token, token_expiry, login_attempts, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW() + INTERVAL '24 hours', $14, NOW(), NOW()) 
       RETURNING id, username, first_name, last_name, email, role, created_at`,
       [
         generatedUsername,
@@ -718,26 +780,38 @@ export const register = async (req, res, next) => {
         address || null,
         dateOfBirth || null,
         false, // is_verified = false initially
+        false, // profile_completed = false initially
         "active",
+        generateVerificationToken(1), // Will update after getting real user ID
         0, // login_attempts
       ]
     );
 
     const newUser = result.rows[0];
-    logger.info("✅ User created successfully", {
+
+    // Generate proper verification token with real user ID
+    const properVerificationToken = generateVerificationToken(newUser.id);
+
+    // Update user with proper verification token
+    await query(
+      `UPDATE users SET 
+       verification_token = $1,
+       token_expiry = NOW() + INTERVAL '24 hours'
+       WHERE id = $2`,
+      [properVerificationToken, newUser.id]
+    );
+
+    logger.info("✅ User created successfully with email verification", {
       userId: newUser.id,
       username: generatedUsername,
       email: email.toLowerCase(),
     });
 
-    // Generate verification token
-    const verificationToken = generateVerificationToken(newUser.id);
-
-    // Create comprehensive audit log
+    // Keep your existing comprehensive audit log
     await createAuditLog({
       action: AUDIT_ACTIONS.USER_CREATED,
       userId: newUser.id,
-      details: `User registered with email: ${email.toLowerCase()}, role: ${role}`,
+      details: `User registered with email verification required: ${email.toLowerCase()}, role: ${role}`,
       ipAddress: req.ip,
       userAgent: req.get("User-Agent"),
       metadata: {
@@ -745,46 +819,50 @@ export const register = async (req, res, next) => {
         role: role,
         hasPhone: !!phone,
         hasAddress: !!address,
+        requiresEmailVerification: true,
       },
     });
 
-    // Send welcome email with verification
+    // UPDATED: Send verification email using your existing template system
     setImmediate(async () => {
       try {
+        // Add emailVerification template to your existing EmailService templates
         await emailService.sendTemplate(
-          "welcomeEmail",
+          "emailVerification", // New template to add to your existing templates
           {
             name: fullName,
-            username: generatedUsername,
-            email: email.toLowerCase(),
-            role: role,
-            verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email?token=${verificationToken}`,
-            loginLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/login`,
+            firstName: parsedFirstName || fullName,
+            verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${properVerificationToken}`,
             supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
+            expirationTime: "24 hours",
           },
           email.toLowerCase()
         );
-        logger.info("📧 Welcome email sent successfully", {
+        logger.info("📧 Email verification email sent successfully", {
+          userId: newUser.id,
           email: email.toLowerCase(),
         });
       } catch (emailError) {
-        logger.error("❌ Failed to send welcome email", {
+        logger.error("❌ Failed to send verification email", {
+          userId: newUser.id,
           email: email.toLowerCase(),
           error: emailError.message,
         });
       }
     });
 
-    // Return success response
+    // Keep your existing success response with updated message
     res.status(201).json({
       status: "success",
-      message: "Registration successful. Please check your email for verification instructions.",
+      message:
+        "Registration successful. Please check your email to verify your account before logging in.",
       data: {
         user: formatUserResponse({
           ...newUser,
           first_name: parsedFirstName,
           last_name: parsedLastName,
           is_verified: false,
+          profile_completed: false,
           status: "active",
           phone: phone || null,
           address: address || null,
@@ -794,10 +872,188 @@ export const register = async (req, res, next) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error("💥 Registration error", {
+    logger.error("💥 Registration error with email verification", {
       email: req.body?.email,
       error: error.message,
       stack: error.stack,
+    });
+    next(error);
+  }
+};
+
+/**
+ * Check Email Existence
+ */
+export const checkEmailExists = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        status: "error",
+        message: "Email is required",
+      });
+    }
+
+    const result = await query("SELECT id, is_verified FROM users WHERE email = $1", [
+      email.toLowerCase(),
+    ]);
+
+    const exists = result.rows.length > 0;
+    const verified = exists ? result.rows[0].is_verified : false;
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        exists,
+        verified,
+        available: !exists,
+      },
+    });
+  } catch (error) {
+    logger.error("Email check error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Email check failed",
+    });
+  }
+};
+
+/**
+ * Complete user profile after email verification
+ */
+export const completeProfile = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      throw new AuthenticationError("Profile completion token required");
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+
+    // FIXED: JavaScript-compatible type checking instead of TypeScript 'as'
+    if (typeof decoded !== "object" || decoded === null) {
+      throw new AuthenticationError("Invalid token format");
+    }
+
+    // FIXED: Use bracket notation instead of type assertion
+    if (!decoded["purpose"] || decoded["purpose"] !== "profile_completion") {
+      throw new AuthenticationError("Invalid token purpose");
+    }
+
+    if (!decoded["userId"]) {
+      throw new AuthenticationError("Invalid token - missing user ID");
+    }
+
+    // FIXED: Extract values with proper checking
+    const userId = decoded["userId"];
+    const profileData = req.body;
+
+    // Get user info
+    const userResult = await query(
+      "SELECT id, role, is_verified, first_name, last_name, email FROM users WHERE id = $1",
+      [userId]
+    );
+
+    if (userResult.rows.length === 0 || !userResult.rows[0].is_verified) {
+      throw new AuthenticationError("User not found or not verified");
+    }
+
+    const user = userResult.rows[0];
+    const userRole = user.role;
+
+    // Validate required fields based on role
+    const requiredFields = ["phone", "address", "dateOfBirth", "gender"];
+    if (userRole === "student") {
+      requiredFields.push("gradeLevel", "parentEmail", "emergencyContact");
+    } else if (userRole === "teacher") {
+      requiredFields.push("department", "qualifications");
+    }
+
+    for (const field of requiredFields) {
+      if (!profileData[field]) {
+        throw new ValidationError(`${field} is required for ${userRole}s`);
+      }
+    }
+
+    // Update user profile
+    const updateQuery = `
+      UPDATE users SET 
+        phone = $1, 
+        address = $2, 
+        date_of_birth = $3, 
+        gender = $4, 
+        bio = $5,
+        parent_email = $6,
+        emergency_contact = $7,
+        qualifications = $8,
+        profile_completed = true,
+        profile_completed_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $9
+      RETURNING id, username, first_name, last_name, email, role
+    `;
+
+    const updateResult = await query(updateQuery, [
+      profileData.phone,
+      profileData.address,
+      profileData.dateOfBirth,
+      profileData.gender,
+      profileData.bio || null,
+      profileData.parentEmail || null,
+      profileData.emergencyContact || null,
+      profileData.qualifications || null,
+      userId,
+    ]);
+
+    const updatedUser = updateResult.rows[0];
+
+    // Create audit log using your existing system
+    await createAuditLog({
+      action: AUDIT_ACTIONS.PROFILE_UPDATED,
+      userId: userId,
+      details: `Profile completed successfully for ${userRole}`,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+      metadata: {
+        profileCompletion: true,
+        role: userRole,
+        completedFields: requiredFields,
+      },
+    });
+
+    // Generate full access token using your existing function
+    const accessToken = generateAccessToken({
+      id: updatedUser.id,
+      username: updatedUser.username,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      isVerified: true,
+    });
+
+    logger.info("Profile completed successfully", {
+      userId: updatedUser.id,
+      role: userRole,
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Profile completed successfully!",
+      data: {
+        user: formatUserResponse({
+          ...updatedUser,
+          is_verified: true,
+          profile_completed: true,
+        }),
+        token: accessToken,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error("Profile completion error:", {
+      error: error.message,
+      ip: req.ip,
     });
     next(error);
   }
@@ -1500,9 +1756,20 @@ export const verifyEmail = async (req, res, next) => {
 
     logger.info("📧 Email verified successfully", { userId: user.id });
 
+    const tempToken = jwt.sign(
+      { userId: user.id, purpose: "profile_completion" },
+      process.env.JWT_SECRET || "your-secret-key",
+      { expiresIn: "2h" }
+    );
+
     res.json({
       status: "success",
-      message: "Email verified successfully",
+      message: "Email verified successfully! Please complete your profile to continue.",
+      data: {
+        user: formatUserResponse(user),
+        tempToken, // Add this
+        nextStep: user.profile_completed ? "login" : "complete-profile", // Add this
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -1968,6 +2235,7 @@ const authController = {
   verifyEmail,
   resendVerification,
   verifyUserEmail, // Dev only
+  checkEmailExists,
 
   // Utility endpoints
   checkUser,
@@ -1975,6 +2243,7 @@ const authController = {
 
   // Profile management
   updateProfile,
+  completeProfile,
 
   // Legacy aliases (for backward compatibility)
   resendVerificationEmail: resendVerification,

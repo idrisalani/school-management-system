@@ -25,6 +25,9 @@ import {
 } from "../../components/ui/card";
 import RegistrationErrorBoundary from "./RegistrationErrorBoundary";
 
+// Import the email validation hook
+import { useEmailValidation } from "../../hooks/useEmailValidation";
+
 /**
  * @typedef {object} RegisterData
  * @property {string} username - User's username (firstName + lastName)
@@ -136,6 +139,9 @@ const Register = () => {
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [registeredEmail, setRegisteredEmail] = useState("");
 
+  // Email validation hook
+  const { emailStatus, checkEmail, resetEmailStatus } = useEmailValidation();
+
   /** @type {[FormData, React.Dispatch<React.SetStateAction<FormData>>]} */
   const [formData, setFormData] = useState(initialFormData);
 
@@ -174,6 +180,23 @@ const Register = () => {
       );
     }
   }, [formData.firstName, formData.lastName, formData.email, formData.role]);
+
+  // Email validation with debounce
+  useEffect(() => {
+    if (
+      formData.email &&
+      formData.email.includes("@") &&
+      formData.email.length > 3
+    ) {
+      const timer = setTimeout(() => {
+        checkEmail(formData.email);
+      }, 800); // Slightly longer debounce for better UX
+
+      return () => clearTimeout(timer);
+    } else {
+      resetEmailStatus();
+    }
+  }, [formData.email, checkEmail, resetEmailStatus]);
 
   // Test API connection on component mount
   useEffect(() => {
@@ -215,6 +238,29 @@ const Register = () => {
       // If no history, go to login page or home page
       navigate("/login");
     }
+  };
+
+  /**
+   * Get email validation status icon
+   */
+  const getEmailStatusIcon = () => {
+    if (emailStatus.isChecking) {
+      return <Loader2 className="h-5 w-5 animate-spin text-gray-400" />;
+    }
+
+    if (emailStatus.exists === true) {
+      return <AlertCircle className="h-5 w-5 text-red-500" />;
+    }
+
+    if (
+      emailStatus.exists === false &&
+      formData.email &&
+      formData.email.includes("@")
+    ) {
+      return <CheckCircle className="h-5 w-5 text-green-500" />;
+    }
+
+    return <Mail className="h-5 w-5 text-gray-400" />;
   };
 
   /**
@@ -322,11 +368,19 @@ const Register = () => {
       newErrors.lastName = "Last name must be at least 2 characters";
     }
 
-    // Email validation
+    // Enhanced email validation
     if (!formData.email) {
       newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
+    } else if (emailStatus.exists === true) {
+      if (emailStatus.verified) {
+        newErrors.email =
+          "Email is already registered and verified. Try logging in instead.";
+      } else {
+        newErrors.email =
+          "Email is already registered but not verified. Check your email for verification link.";
+      }
     }
 
     // Password validation
@@ -355,11 +409,26 @@ const Register = () => {
    * Handle form submission
    * @param {React.FormEvent} e - Form event
    */
-  // 🔧 UPDATE this section in your Register.jsx file
-  // Find the handleSubmit function and update the registrationData object:
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Don't submit if email exists or is still being checked
+    if (emailStatus.isChecking) {
+      return;
+    }
+
     if (!validateForm()) return;
+
+    // Additional check to prevent submission if email exists
+    if (emailStatus.exists === true) {
+      setErrors((prev) => ({
+        ...prev,
+        email: emailStatus.verified
+          ? "Email is already registered and verified. Try logging in instead."
+          : "Email is already registered but not verified. Check your email for verification link.",
+      }));
+      return;
+    }
 
     setIsLoading(true);
     setErrors({});
@@ -376,7 +445,7 @@ const Register = () => {
         }
       }
 
-      // ENHANCED: Debug the form data before sending
+      // Debug the form data before sending
       console.log("📝 Form data before processing:", {
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -386,6 +455,7 @@ const Register = () => {
         role: formData.role,
         hasConfirmPassword: !!formData.confirmPassword,
         passwordsMatch: formData.password === formData.confirmPassword,
+        emailStatus: emailStatus,
       });
 
       // Create the registration data object
@@ -396,22 +466,15 @@ const Register = () => {
         lastName: formData.lastName.trim(),
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
-        confirmPassword: formData.confirmPassword, // ✅ ENSURE THIS IS INCLUDED
+        confirmPassword: formData.confirmPassword,
         role: formData.role,
       };
 
-      // ENHANCED: Debug the request data
       console.log("🚀 Sending registration data:", {
         ...registrationData,
         password: "***",
         confirmPassword: registrationData.confirmPassword ? "***" : "MISSING",
       });
-
-      console.log(
-        "📊 Request size check:",
-        JSON.stringify(registrationData).length,
-        "characters"
-      );
 
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/api/v1/auth/register`,
@@ -455,6 +518,12 @@ const Register = () => {
 
           console.error("❌ Validation errors:", validationErrors);
           setErrors((prev) => ({ ...prev, ...validationErrors }));
+        } else if (response.status === 409) {
+          // Email already exists
+          setErrors((prev) => ({
+            ...prev,
+            email: data.message || "Email already exists",
+          }));
         } else {
           console.error("❌ Registration failed:", data);
           setErrors((prev) => ({
@@ -479,6 +548,7 @@ const Register = () => {
       // Success - clear saved form data and show success
       localStorage.removeItem("registrationForm");
       setFormData(initialFormData);
+      resetEmailStatus(); // Clear email validation state
       setShowSuccessModal(true);
     } catch (error) {
       console.error("❌ Registration error:", error);
@@ -637,14 +707,14 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Email Field */}
+            {/* Enhanced Email Field with Validation Status */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Email Address
               </label>
               <div className="mt-1 relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                  {getEmailStatusIcon()}
                 </div>
                 <input
                   name="email"
@@ -658,7 +728,12 @@ const Register = () => {
                     ${
                       errors.email
                         ? "border-red-300 focus:ring-red-500 focus:border-red-500"
-                        : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                        : emailStatus.exists === false &&
+                            formData.email.includes("@")
+                          ? "border-green-300 focus:ring-green-500 focus:border-green-500"
+                          : emailStatus.exists === true
+                            ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                            : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                     }
                     ${isLoading ? "bg-gray-100" : ""}
                   `}
@@ -666,8 +741,25 @@ const Register = () => {
                   required
                 />
               </div>
+
+              {/* Email Validation Messages */}
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+              )}
+              {emailStatus.exists === false &&
+                formData.email &&
+                formData.email.includes("@") &&
+                !errors.email && (
+                  <p className="mt-1 text-sm text-green-600 flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Email is available
+                  </p>
+                )}
+              {emailStatus.isChecking && (
+                <p className="mt-1 text-sm text-gray-600 flex items-center">
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Checking email availability...
+                </p>
               )}
             </div>
 
@@ -869,7 +961,12 @@ const Register = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading || connectionStatus === "failed"}
+                disabled={
+                  isLoading ||
+                  connectionStatus === "failed" ||
+                  emailStatus.isChecking ||
+                  emailStatus.exists === true
+                }
                 className={`
                   w-full flex justify-center items-center py-2 px-4 border border-transparent 
                   rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 

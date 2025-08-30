@@ -1,10 +1,11 @@
 // @ts-nocheck - This is a database seed script that doesn't need strict TypeScript checking
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Fix 1: Get __dirname equivalent for ES modules
+// Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -13,28 +14,33 @@ const __dirname = path.dirname(__filename);
  * @returns {Promise<void>}
  */
 async function runSeeds() {
-  // Fix 2: Validate environment variables
-  const requiredEnvVars = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"];
-  const missingVars = requiredEnvVars.filter(
-    (varName) => !process.env[varName]
-  );
+  // Validate environment variables - PostgreSQL/Supabase format
+  const databaseUrl = process.env.DATABASE_URL;
 
-  if (missingVars.length > 0) {
+  if (!databaseUrl) {
     throw new Error(
-      `Missing required environment variables: ${missingVars.join(", ")}`
+      "Missing required environment variable: DATABASE_URL. " +
+        "Should be in format: postgresql://user:password@host:port/database"
     );
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    multipleStatements: true,
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
   });
+
+  let client;
 
   try {
     console.log("🌱 Starting database seeding...");
+    console.log("🔌 Connecting to PostgreSQL database...");
+
+    // Get a client from the pool
+    client = await pool.connect();
+
+    // Test connection
+    const testResult = await client.query("SELECT NOW()");
+    console.log(`✅ Connected to database at: ${testResult.rows[0].now}`);
 
     // Get all seed files
     const files = await fs.readdir(__dirname);
@@ -47,54 +53,202 @@ async function runSeeds() {
 
     console.log(`📁 Found ${seedFiles.length} seed files:`, seedFiles);
 
-    // Run seeds in order
-    for (const file of seedFiles) {
-      console.log(`🔄 Running seed: ${file}`);
+    // Begin transaction for all seeds
+    await client.query("BEGIN");
 
-      try {
-        const sql = await fs.readFile(path.join(__dirname, file), "utf8");
+    try {
+      // Run seeds in order
+      for (const file of seedFiles) {
+        console.log(`🔄 Running seed: ${file}`);
 
-        // Fix 3: Skip empty files
-        if (!sql.trim()) {
-          console.log(`⏭️  Skipping empty file: ${file}`);
-          continue;
+        try {
+          const sql = await fs.readFile(path.join(__dirname, file), "utf8");
+
+          // Skip empty files
+          if (!sql.trim()) {
+            console.log(`⏭️  Skipping empty file: ${file}`);
+            continue;
+          }
+
+          // Execute the SQL file
+          await client.query(sql);
+          console.log(`✅ Completed seed: ${file}`);
+        } catch (fileError) {
+          console.error(`❌ Error in seed file ${file}:`, fileError.message);
+          throw fileError;
         }
-
-        await connection.query(sql);
-        console.log(`✅ Completed seed: ${file}`);
-      } catch (fileError) {
-        console.error(`❌ Error in seed file ${file}:`, fileError.message);
-        throw fileError;
       }
+
+      // Commit transaction
+      await client.query("COMMIT");
+      console.log("💾 All seeds committed successfully");
+    } catch (seedError) {
+      // Rollback transaction on error
+      await client.query("ROLLBACK");
+      console.error("🔄 Transaction rolled back due to error");
+      throw seedError;
     }
 
     console.log("🎉 Database seeding completed successfully!");
+
+    // Show some stats
+    const userCount = await client.query("SELECT COUNT(*) FROM users");
+    const classCount = await client.query("SELECT COUNT(*) FROM classes");
+
+    console.log("📊 Database Statistics:");
+    console.log(`   👥 Users: ${userCount.rows[0].count}`);
+    console.log(`   📚 Classes: ${classCount.rows[0].count}`);
   } catch (error) {
     console.error("💥 Seeding failed:", error.message);
     console.error("Full error:", error);
     throw error;
   } finally {
     try {
-      await connection.end();
-      console.log("🔌 Database connection closed");
+      // Release the client back to the pool
+      if (client) {
+        client.release();
+        console.log("🔓 Database client released");
+      }
+      // Close the pool
+      await pool.end();
+      console.log("🔌 Database connection pool closed");
     } catch (closeError) {
       console.error("⚠️  Error closing connection:", closeError.message);
     }
   }
 }
 
-// Fix 4: Add proper error handling for the main execution
+/**
+ * Alternative function to run individual seed file
+ * @param {string} seedFileName - Name of the seed file to run
+ * @returns {Promise<void>}
+ */
+export async function runSingleSeed(seedFileName) {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error("Missing DATABASE_URL environment variable");
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  });
+
+  let client;
+
+  try {
+    console.log(`🔄 Running single seed: ${seedFileName}`);
+
+    client = await pool.connect();
+
+    const sql = await fs.readFile(path.join(__dirname, seedFileName), "utf8");
+
+    if (!sql.trim()) {
+      console.log("⏭️  Seed file is empty");
+      return;
+    }
+
+    await client.query(sql);
+    console.log(`✅ Completed seed: ${seedFileName}`);
+  } catch (error) {
+    console.error(`❌ Error running seed ${seedFileName}:`, error.message);
+    throw error;
+  } finally {
+    if (client) client.release();
+    await pool.end();
+  }
+}
+
+/**
+ * Reset database by dropping and recreating tables
+ * @returns {Promise<void>}
+ */
+export async function resetDatabase() {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error("Missing DATABASE_URL environment variable");
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  });
+
+  let client;
+
+  try {
+    console.log("🗑️  Resetting database...");
+
+    client = await pool.connect();
+
+    // Drop all tables (be careful with this!)
+    const dropTablesQuery = `
+      DROP SCHEMA public CASCADE;
+      CREATE SCHEMA public;
+      GRANT ALL ON SCHEMA public TO postgres;
+      GRANT ALL ON SCHEMA public TO public;
+    `;
+
+    await client.query(dropTablesQuery);
+    console.log("🧹 Database reset completed");
+  } catch (error) {
+    console.error("❌ Error resetting database:", error.message);
+    throw error;
+  } finally {
+    if (client) client.release();
+    await pool.end();
+  }
+}
+
+// Run if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // Only run if this file is executed directly
-  runSeeds()
-    .then(() => {
-      console.log("🏁 Seeding process finished");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("🚨 Fatal error during seeding:", error);
-      process.exit(1);
-    });
+  const command = process.argv[2];
+
+  switch (command) {
+    case "reset":
+      resetDatabase()
+        .then(() => {
+          console.log("🏁 Database reset finished");
+          process.exit(0);
+        })
+        .catch((error) => {
+          console.error("🚨 Fatal error during reset:", error);
+          process.exit(1);
+        });
+      break;
+
+    case "single":
+      const fileName = process.argv[3];
+      if (!fileName) {
+        console.error("❌ Please provide a seed file name");
+        process.exit(1);
+      }
+
+      runSingleSeed(fileName)
+        .then(() => {
+          console.log("🏁 Single seed finished");
+          process.exit(0);
+        })
+        .catch((error) => {
+          console.error("🚨 Fatal error during single seed:", error);
+          process.exit(1);
+        });
+      break;
+
+    default:
+      // Run all seeds
+      runSeeds()
+        .then(() => {
+          console.log("🏁 Seeding process finished");
+          process.exit(0);
+        })
+        .catch((error) => {
+          console.error("🚨 Fatal error during seeding:", error);
+          process.exit(1);
+        });
+  }
 }
 
 export default runSeeds;
