@@ -24,10 +24,7 @@ const createPool = () => {
   if (!pool && process.env.DATABASE_URL) {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl:
-        process.env.NODE_ENV === "production"
-          ? { rejectUnauthorized: false }
-          : false,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
       max: process.env.NODE_ENV === "production" ? 1 : 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -105,15 +102,11 @@ const validateConfig = () => {
   const required = [];
 
   if (!process.env.DATABASE_URL) {
-    console.warn(
-      "⚠️  DATABASE_URL not configured - database features disabled"
-    );
+    console.warn("⚠️  DATABASE_URL not configured - database features disabled");
   }
 
   if (required.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${required.join(", ")}`
-    );
+    throw new Error(`Missing required environment variables: ${required.join(", ")}`);
   }
 
   console.log("✅ Configuration validated");
@@ -140,7 +133,7 @@ const requestLogger = (req, res, next) => {
 // Rate limiting configurations
 const authRateLimitConfig = {
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 50,
   message: "Too many login attempts from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
@@ -244,8 +237,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://school-management-system-smoky-seven.vercel.app",
-      "https://school-management-system-668kkjtnr-schoolms.vercel.app",
+      "https://school-management-frontend-flax.vercel.app", // Add this line
+      "https://school-management-backend-sandy.vercel.app",
       process.env.ALLOWED_ORIGINS,
       /\.vercel\.app$/,
     ].filter(Boolean),
@@ -309,9 +302,7 @@ apiRouter.get("/test", async (req, res) => {
 // Database test endpoint
 apiRouter.get("/db-test", async (req, res) => {
   try {
-    const result = await query(
-      "SELECT NOW() as current_time, version() as db_version"
-    );
+    const result = await query("SELECT NOW() as current_time, version() as db_version");
 
     res.json({
       message: "Database connection and query successful!",
@@ -333,14 +324,7 @@ apiRouter.get("/db-test", async (req, res) => {
 // Auth routes
 apiRouter.post("/auth/register", async (req, res) => {
   try {
-    const {
-      username,
-      email,
-      password,
-      firstName,
-      lastName,
-      role = "student",
-    } = req.body;
+    const { username, email, password, firstName, lastName, role = "student" } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({
@@ -350,10 +334,10 @@ apiRouter.post("/auth/register", async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await query(
-      "SELECT id FROM users WHERE email = $1 OR username = $2",
-      [email, username]
-    );
+    const existingUser = await query("SELECT id FROM users WHERE email = $1 OR username = $2", [
+      email,
+      username,
+    ]);
 
     if (existingUser.rows.length > 0) {
       return res.status(400).json({
@@ -496,10 +480,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     success: false,
     error: "Internal server error",
-    message:
-      process.env.NODE_ENV === "development"
-        ? err.message
-        : "Something went wrong",
+    message: process.env.NODE_ENV === "development" ? err.message : "Something went wrong",
     timestamp: new Date().toISOString(),
   });
 });

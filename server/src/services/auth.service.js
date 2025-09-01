@@ -46,22 +46,13 @@ const validateJWTSecret = (secret, name) => {
 class AuthService {
   constructor() {
     // Validate all JWT secrets on initialization
-    this.JWT_ACCESS_SECRET = validateJWTSecret(
-      process.env.JWT_ACCESS_SECRET,
-      "access"
-    );
-    this.JWT_REFRESH_SECRET = validateJWTSecret(
-      process.env.JWT_REFRESH_SECRET,
-      "refresh"
-    );
+    this.JWT_ACCESS_SECRET = validateJWTSecret(process.env.JWT_ACCESS_SECRET, "access");
+    this.JWT_REFRESH_SECRET = validateJWTSecret(process.env.JWT_REFRESH_SECRET, "refresh");
     this.JWT_VERIFICATION_SECRET = validateJWTSecret(
       process.env.JWT_VERIFICATION_SECRET,
       "verification"
     );
-    this.JWT_RESET_SECRET = validateJWTSecret(
-      process.env.JWT_RESET_SECRET,
-      "reset"
-    );
+    this.JWT_RESET_SECRET = validateJWTSecret(process.env.JWT_RESET_SECRET, "reset");
   }
 
   /**
@@ -86,10 +77,7 @@ class AuthService {
       if (error instanceof jwt.JsonWebTokenError) {
         throw new ApiError("Invalid token", 401);
       }
-      throw new ApiError(
-        error instanceof Error ? error.message : "Token verification failed",
-        401
-      );
+      throw new ApiError(error instanceof Error ? error.message : "Token verification failed", 401);
     }
   }
 
@@ -348,44 +336,76 @@ class AuthService {
   }
 
   /**
-   * Send verification email
+   * Send verification email using EmailService templates
    * @param {string} email - User email
    * @param {string} token - Verification token
+   * @param {string} [userName] - User name for personalization
    * @returns {Promise<void>}
    */
-  async sendVerificationEmail(email, token) {
-    await EmailService.sendEmail({
-      to: email,
-      subject: "Verify Your Email",
-      html: `
-        <h1>Welcome to School Management System</h1>
-        <p>Please verify your email by clicking the link below:</p>
-        <a href="${process.env.CLIENT_URL}/verify-email?token=${token}">
-          Verify Email
-        </a>
-      `,
-    });
+  async sendVerificationEmail(email, token, userName = "") {
+    try {
+      await EmailService.sendTemplate(
+        "emailVerification",
+        {
+          verificationLink: `${process.env.CLIENT_URL}/verify-email?token=${token}`,
+          name: userName,
+          expirationTime: "24 hours",
+        },
+        email
+      );
+    } catch (error) {
+      // Log but don't throw - email failure shouldn't block registration
+      console.error("Failed to send verification email:", error.message);
+    }
   }
 
   /**
-   * Send password reset email
+   * Send password reset email using EmailService templates
    * @param {string} email - User email
    * @param {string} token - Reset token
+   * @param {string} [userName] - User name for personalization
    * @returns {Promise<void>}
    */
-  async sendResetEmail(email, token) {
-    await EmailService.sendEmail({
-      to: email,
-      subject: "Reset Your Password",
-      html: `
-        <h1>Password Reset Request</h1>
-        <p>Click the link below to reset your password:</p>
-        <a href="${process.env.CLIENT_URL}/reset-password?token=${token}">
-          Reset Password
-        </a>
-        <p>This link will expire in 1 hour.</p>
-      `,
-    });
+  async sendResetEmail(email, token, userName = "") {
+    try {
+      await EmailService.sendTemplate(
+        "passwordReset",
+        {
+          resetLink: `${process.env.CLIENT_URL}/reset-password?token=${token}`,
+          name: userName,
+        },
+        email
+      );
+    } catch (error) {
+      // Log but don't throw - email failure shouldn't block password reset request
+      console.error("Failed to send reset email:", error.message);
+    }
+  }
+
+  /**
+   * Send welcome email after successful verification
+   * @param {string} email - User email
+   * @param {string} userName - User name
+   * @param {string} username - Username for login
+   * @param {string} role - User role
+   * @returns {Promise<void>}
+   */
+  async sendWelcomeEmail(email, userName, username, role) {
+    try {
+      await EmailService.sendTemplate(
+        "welcomeEmail",
+        {
+          name: userName,
+          username: username,
+          email: email,
+          role: role,
+          verificationLink: `${process.env.CLIENT_URL}/dashboard`, // Link to dashboard after verification
+        },
+        email
+      );
+    } catch (error) {
+      console.error("Failed to send welcome email:", error.message);
+    }
   }
 
   /**
@@ -431,13 +451,95 @@ class AuthService {
   }
 
   /**
-   * Request password reset
-   * @param {string} email - User email
-   * @returns {Promise<boolean>} Success status
+   * Register new user - UPDATED to use EmailService templates
+   */
+  async registerUser(userData) {
+    const { email, password, name, role, phone, address } = userData;
+
+    // Check if user already exists
+    const existingUserQuery = "SELECT id FROM users WHERE email = $1";
+    const existingResult = await query(existingUserQuery, [email]);
+
+    if (existingResult.rows.length > 0) {
+      throw new ApiError("Email already registered", 400);
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const insertQuery = `
+      INSERT INTO users (email, password, name, role, phone, address, is_verified)
+      VALUES ($1, $2, $3, $4, $5, $6, false)
+      RETURNING id, email, name, role, phone, address, created_at, is_verified
+    `;
+
+    const userResult = await query(insertQuery, [
+      email,
+      hashedPassword,
+      name,
+      role || "student",
+      phone || null,
+      address || null,
+    ]);
+
+    const user = userResult.rows[0];
+
+    // Generate verification token and send email using EmailService
+    const verificationToken = this.generateVerificationToken(user.id);
+    await this.sendVerificationEmail(user.email, verificationToken, user.name);
+
+    // Create audit log
+    await createAuditLog({
+      action: "USER_REGISTERED",
+      userId: user.id,
+      details: "New user registration",
+    });
+
+    return user;
+  }
+
+  /**
+   * Verify user email - UPDATED to send welcome email
+   */
+  async verifyEmail(token) {
+    const decoded = this.verifyToken(token, this.JWT_VERIFICATION_SECRET);
+
+    // Find user and update verification status
+    const updateQuery = `
+      UPDATE users 
+      SET is_verified = true, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id, email, name, role, is_verified
+    `;
+
+    const result = await query(updateQuery, [decoded.userId]);
+
+    if (result.rows.length === 0) {
+      throw new ApiError("Invalid verification token", 400);
+    }
+
+    const user = result.rows[0];
+
+    // Send welcome email after successful verification
+    await this.sendWelcomeEmail(user.email, user.name, user.email.split("@")[0], user.role);
+
+    // Create audit log
+    await createAuditLog({
+      action: "EMAIL_VERIFIED",
+      userId: user.id,
+      details: "User email verified",
+    });
+
+    return user;
+  }
+
+  /**
+   * Request password reset - UPDATED to pass user name
    */
   async requestPasswordReset(email) {
     // Find user by email
-    const userQuery = "SELECT id, email FROM users WHERE email = $1";
+    const userQuery = "SELECT id, email, name FROM users WHERE email = $1";
     const result = await query(userQuery, [email]);
 
     if (result.rows.length === 0) {
@@ -448,7 +550,8 @@ class AuthService {
     const user = result.rows[0];
     const resetToken = this.generateResetToken(user.id);
 
-    await this.sendResetEmail(user.email, resetToken);
+    // Send reset email with user name for personalization
+    await this.sendResetEmail(user.email, resetToken, user.name);
 
     // Create audit log
     await createAuditLog({
