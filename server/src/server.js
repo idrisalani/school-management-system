@@ -28,6 +28,7 @@ import courseRoutes from "./routes/course.routes.js";
 import assignmentRoutes from "./routes/assignment.routes.js";
 import gradeRoutes from "./routes/grade.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
+import passwordResetRoutes from "./routes/passwordReset.routes.js";
 
 // Load environment variables
 dotenv.config();
@@ -284,6 +285,7 @@ app.get("/api/v1/db-test", async (req, res) => {
 // ========================= API ROUTES - FIXED MIDDLEWARE USAGE =========================
 // Authentication routes
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", passwordResetRoutes);
 
 // Protected routes (require authentication) - FIXED: Create middleware instance once
 const authMiddleware = authenticate();
