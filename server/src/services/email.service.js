@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-// server/src/services/email.service.js - Reconciled Email Service
+// server/src/services/email.service.js - Enhanced with Gmail SMTP Support
 import nodemailer from "nodemailer";
 import logger from "../utils/logger.js";
 import dotenv from "dotenv";
@@ -8,19 +8,19 @@ import dotenv from "dotenv";
 dotenv.config();
 
 /**
- * Email Service Class - Combines reliability with rich features
+ * Email Service Class - Enhanced with Gmail SMTP support
  */
 class EmailService {
   constructor() {
     this.transporter = null;
     this.isConfigured = false;
-    this.mode = "unknown"; // 'production', 'development', 'mock'
+    this.mode = "unknown"; // 'production', 'development', 'mock', 'gmail'
     this.config = null;
     this.initializeTransporter();
   }
 
   /**
-   * Initialize email transporter with multiple fallback strategies
+   * Initialize email transporter with Gmail SMTP priority
    */
   async initializeTransporter() {
     try {
@@ -28,19 +28,25 @@ class EmailService {
       const config = this.getEmailConfiguration();
       this.config = config;
 
-      // Strategy 1: Production SMTP (if fully configured)
+      // PRIORITY Strategy 1: Gmail SMTP (if configured)
+      if (config.gmailUser && config.gmailPassword) {
+        await this.initializeGmailSMTP(config);
+        return;
+      }
+
+      // Strategy 2: Production SMTP (if fully configured)
       if (config.host && config.user && config.pass) {
         await this.initializeProductionSMTP(config);
         return;
       }
 
-      // Strategy 2: Development mode (console logging)
+      // Strategy 3: Development mode (console logging)
       if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev") {
         this.initializeDevelopmentMode();
         return;
       }
 
-      // Strategy 3: Mock mode (always works, logs instead of sending)
+      // Strategy 4: Mock mode (always works, logs instead of sending)
       this.initializeMockMode();
     } catch (error) {
       logger.error("Email service initialization failed, falling back to mock mode:", error);
@@ -53,6 +59,11 @@ class EmailService {
    */
   getEmailConfiguration() {
     return {
+      // Gmail SMTP Configuration (Priority)
+      gmailUser: process.env.GMAIL_USER,
+      gmailPassword: process.env.GMAIL_APP_PASSWORD,
+
+      // Generic SMTP Configuration (Fallback)
       host: process.env.SMTP_HOST || process.env.EMAIL_HOST,
       port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || "587"),
       secure: (process.env.SMTP_SECURE || process.env.EMAIL_SECURE) === "true",
@@ -64,7 +75,47 @@ class EmailService {
   }
 
   /**
-   * Initialize production SMTP transporter
+   * Initialize Gmail SMTP transporter (PRIMARY METHOD)
+   */
+  async initializeGmailSMTP(config) {
+    try {
+      const transportConfig = {
+        service: "gmail",
+        auth: {
+          user: config.gmailUser,
+          pass: config.gmailPassword,
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      };
+
+      this.transporter = nodemailer.createTransporter(transportConfig);
+
+      // Verify Gmail connection
+      await this.transporter.verify();
+
+      this.isConfigured = true;
+      this.mode = "gmail";
+
+      logger.info("📧 Gmail SMTP initialized successfully", {
+        user: config.gmailUser?.substring(0, 3) + "***",
+        service: "gmail",
+        mode: "production",
+      });
+    } catch (error) {
+      logger.warn("Gmail SMTP failed, falling back to generic SMTP:", error.message);
+      // Try generic SMTP as fallback
+      if (config.host && config.user && config.pass) {
+        await this.initializeProductionSMTP(config);
+      } else {
+        this.initializeDevelopmentMode();
+      }
+    }
+  }
+
+  /**
+   * Initialize production SMTP transporter (FALLBACK)
    */
   async initializeProductionSMTP(config) {
     try {
@@ -88,7 +139,7 @@ class EmailService {
         delete transportConfig.port;
       }
 
-      this.transporter = nodemailer.createTransport(transportConfig);
+      this.transporter = nodemailer.createTransporter(transportConfig);
 
       // Verify connection
       await this.transporter.verify();
@@ -112,7 +163,7 @@ class EmailService {
    * Initialize development mode (console/stream transport)
    */
   initializeDevelopmentMode() {
-    this.transporter = nodemailer.createTransport({
+    this.transporter = nodemailer.createTransporter({
       streamTransport: true,
       newline: "unix",
       buffer: true,
@@ -175,11 +226,16 @@ class EmailService {
 
       const { to, subject, text, html, from, replyTo, attachments, cc, bcc } = options;
 
-      // Use configured default or fallback
-      const fromAddress = from || this.config?.from || this.config?.user || "noreply@schoolms.com";
+      // Use Gmail user as default sender, then fallback to configured options
+      const fromAddress =
+        from ||
+        this.config?.gmailUser ||
+        this.config?.from ||
+        this.config?.user ||
+        "noreply@schoolms.com";
 
       const mailOptions = {
-        from: fromAddress,
+        from: `"School Management System" <${fromAddress}>`,
         to: to,
         subject: subject,
         text: text,
@@ -199,7 +255,7 @@ class EmailService {
 
       const result = await this.transporter.sendMail(mailOptions);
 
-      logger.info("📧 Email sent successfully:", {
+      logger.info("✅ Email sent successfully:", {
         messageId: result.messageId,
         to: to,
         subject: subject,
@@ -211,9 +267,10 @@ class EmailService {
         messageId: result.messageId,
         response: result.response,
         mode: this.mode,
+        provider: this.mode === "gmail" ? "Gmail SMTP" : this.mode,
       };
     } catch (error) {
-      logger.error("📧 Failed to send email:", {
+      logger.error("❌ Failed to send email:", {
         error: error.message,
         to: options.to,
         subject: options.subject,
@@ -418,6 +475,9 @@ class EmailService {
               </div>
             </div>
 
+            ${
+              verificationLink
+                ? `
             <p>To complete your registration and secure your account, please verify your email address:</p>
             
             <div style="text-align: center; margin: 30px 0;">
@@ -431,11 +491,14 @@ class EmailService {
                 <strong>⏰ Important:</strong> This verification link expires in 24 hours for security reasons.
               </div>
             </div>
+            `
+                : ""
+            }
 
             <div class="next-steps">
               <h3>🚀 What's Next?</h3>
               <ul>
-                <li>Verify your email address using the button above</li>
+                ${verificationLink ? "<li>Verify your email address using the button above</li>" : ""}
                 <li>Log in to your account with your credentials</li>
                 <li>Complete your profile information</li>
                 <li>Explore the system features</li>
@@ -443,10 +506,16 @@ class EmailService {
               </ul>
             </div>
             
+            ${
+              verificationLink
+                ? `
             <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
             <p style="word-break: break-all; color: #667eea; font-family: monospace; font-size: 12px; background-color: #f7fafc; padding: 8px; border-radius: 4px; margin: 12px 0;">
               ${verificationLink}
             </p>
+            `
+                : ""
+            }
             
             <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
           </div>
@@ -475,13 +544,17 @@ Your Login Credentials:
 - Email: ${email}
 - Role: ${role}
 
-To complete your registration, please verify your email address by visiting:
+${
+  verificationLink
+    ? `To complete your registration, please verify your email address by visiting:
 ${verificationLink}
 
-This verification link will expire in 24 hours.
+This verification link will expire in 24 hours.`
+    : ""
+}
 
 What's Next?
-✓ Verify your email address
+${verificationLink ? "✓ Verify your email address" : ""}
 ✓ Log in to your account
 ✓ Complete your profile
 ✓ Start using the system
@@ -1116,8 +1189,10 @@ Once your profile is complete, you'll have full access to all system features!
         <p>This is a test email from the School Management System.</p>
         <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9;">
           <p><strong>Service Mode:</strong> ${this.mode}</p>
+          <p><strong>Provider:</strong> ${this.mode === "gmail" ? "Gmail SMTP" : this.mode}</p>
           <p><strong>Time Sent:</strong> ${new Date().toISOString()}</p>
           <p><strong>Email Configured:</strong> ${this.isConfigured ? "✅ Yes" : "❌ No"}</p>
+          <p><strong>From Address:</strong> ${this.config?.gmailUser || this.config?.user || "N/A"}</p>
         </div>
         <p style="color: #059669; font-weight: bold;">✅ If you received this email, the email service is working correctly!</p>
       </div>
@@ -1129,8 +1204,10 @@ Email Service Test
 This is a test email from the School Management System.
 
 Service Mode: ${this.mode}
+Provider: ${this.mode === "gmail" ? "Gmail SMTP" : this.mode}
 Time Sent: ${new Date().toISOString()}
 Email Configured: ${this.isConfigured ? "Yes" : "No"}
+From Address: ${this.config?.gmailUser || this.config?.user || "N/A"}
 
 ✅ If you received this email, the email service is working correctly!
     `;
@@ -1172,7 +1249,11 @@ Email Configured: ${this.isConfigured ? "Yes" : "No"}
     return {
       configured: this.isConfigured,
       mode: this.mode,
+      provider: this.mode === "gmail" ? "Gmail SMTP" : this.mode,
       config: {
+        gmailUser: this.config?.gmailUser
+          ? this.config.gmailUser.substring(0, 3) + "***"
+          : "Not configured",
         host: this.config?.host || "Not configured",
         port: this.config?.port || "Not configured",
         secure: this.config?.secure || false,
