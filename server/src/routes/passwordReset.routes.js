@@ -36,7 +36,7 @@ router.post(
       logger.info("Password reset request", { email });
 
       // Check if user exists
-      const userQuery = "SELECT id, email, name FROM users WHERE email = $1 AND verified = true";
+      const userQuery = "SELECT id, email, name FROM users WHERE email = $1 AND is_verified = true";
       const userResult = await query(userQuery, [email.toLowerCase()]);
 
       // Always return success to prevent email enumeration
