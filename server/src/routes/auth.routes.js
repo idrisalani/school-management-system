@@ -2,6 +2,8 @@
 import express from "express";
 import authController from "../controllers/auth.controller.js";
 import logger from "../utils/logger.js";
+import passwordResetRoutes from "./passwordReset.routes.js";
+import emailService from "../services/email.service.js";
 
 const router = express.Router();
 
@@ -355,6 +357,9 @@ router.post(
   validatePasswordReset,
   passwordResetHandler
 );
+
+router.use("/", passwordResetRoutes);
+
 router.post(
   "/verify-email/:token",
   rateLimiter(rateLimits.emailVerification),
@@ -496,6 +501,36 @@ router.post(
       res.status(501).json({
         status: "error",
         message: "Refresh token endpoint not implemented",
+      });
+    }
+  })
+);
+
+// Add to server/src/routes/auth.routes.js
+router.post(
+  "/test-email",
+  asyncHandler(async (req, res) => {
+    const { to } = req.body;
+
+    if (!to) {
+      return res.status(400).json({
+        status: "error",
+        message: "Recipient email required",
+      });
+    }
+
+    try {
+      const result = await emailService.sendTestEmail(to);
+
+      res.json({
+        status: "success",
+        message: "Test email sent",
+        result: result,
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: error.message,
       });
     }
   })

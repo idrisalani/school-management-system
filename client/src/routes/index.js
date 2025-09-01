@@ -8,6 +8,10 @@ import ConnectionTest from "../components/tests/ConnectionTest.jsx";
 // Import feature components
 import Login from "../features/auth/Login.jsx";
 import Register from "../features/auth/Register.jsx";
+// ADD THESE PASSWORD RESET IMPORTS
+import ForgotPassword from "../features/auth/ForgotPassword.jsx";
+import ResetPassword from "../features/auth/ResetPassword.jsx";
+
 import AdminDashboard from "../features/admin/AdminDashboard.jsx";
 import TeacherDashboard from "../features/teacher/TeacherDashboard.jsx";
 import StudentDashboard from "../features/student/StudentDashboard.jsx";
@@ -103,6 +107,28 @@ const AppRoutes = () => {
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <Register />
+          )
+        }
+      />
+
+      {/* PASSWORD RESET ROUTES - ADD THESE */}
+      <Route
+        path="/forgot-password"
+        element={
+          isAuthenticated ? (
+            <Navigate to={getDashboardRoute()} replace />
+          ) : (
+            <ForgotPassword />
+          )
+        }
+      />
+      <Route
+        path="/reset-password/:token"
+        element={
+          isAuthenticated ? (
+            <Navigate to={getDashboardRoute()} replace />
+          ) : (
+            <ResetPassword />
           )
         }
       />
