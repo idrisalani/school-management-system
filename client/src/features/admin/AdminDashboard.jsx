@@ -1,9 +1,8 @@
 // @ts-nocheck
 
 // client/src/features/admin/AdminDashboard.jsx - Final version with proper TypeScript types
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { useNavigate } from "react-router-dom";
 import {
   getAdminDashboardData,
   getWeeklyAttendanceData,
@@ -127,7 +126,9 @@ const StatsCard = ({
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const logoutButtonRef = useRef(null);
+  const isLoggingOutRef = useRef(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // State with proper type initialization
   const [dashboardData, setDashboardData] = useState({
@@ -163,14 +164,44 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
+  const handleLogout = useCallback(
+    async (e) => {
+      e?.preventDefault();
+
+      // Prevent multiple logout attempts
+      if (isLoggingOutRef.current || isLoggingOut) {
+        console.log("Logout blocked - already in progress");
+        return;
+      }
+
+      // Set flags immediately
+      isLoggingOutRef.current = true;
+      setIsLoggingOut(true);
+
+      // Disable button immediately
+      if (logoutButtonRef.current) {
+        logoutButtonRef.current.disabled = true;
+        logoutButtonRef.current.textContent = "Logging out...";
+      }
+
+      try {
+        await logout();
+        // Force immediate redirect without React Router
+        window.location.href = "/login";
+      } catch (error) {
+        console.error("Logout failed:", error);
+        // Reset on error
+        setIsLoggingOut(false);
+        isLoggingOutRef.current = false;
+
+        if (logoutButtonRef.current) {
+          logoutButtonRef.current.disabled = false;
+          logoutButtonRef.current.textContent = "Logout";
+        }
+      }
+    },
+    [logout, isLoggingOut]
+  );
 
   // Fetch all dashboard data
   useEffect(() => {
@@ -409,10 +440,24 @@ const AdminDashboard = () => {
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
             <button
+              ref={logoutButtonRef}
               onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              disabled={isLoggingOut}
+              className={`
+                px-4 py-2 text-sm font-medium text-white rounded-lg 
+                transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
+                ${
+                  isLoggingOut
+                    ? "bg-red-400 cursor-not-allowed"
+                    : "bg-red-600 hover:bg-red-700"
+                }
+              `}
+              style={{
+                userSelect: "none",
+                touchAction: "manipulation",
+              }}
             >
-              Logout
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Eye,
   EyeOff,
@@ -25,6 +25,8 @@ import { useAuth } from "../../contexts/AuthContext.jsx"; // ADD THIS IMPORT
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const submitButtonRef = useRef(null);
+  const isSubmittingRef = useRef(false);
 
   // USE AuthContext instead of local state for auth
   const {
@@ -171,9 +173,24 @@ const Login = () => {
   // UPDATED SUBMIT HANDLER TO USE AuthContext
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // ✅ CRITICAL: Prevent multiple submissions immediately
+    if (isSubmittingRef.current || isLoading || authLoading) {
+      console.log("⚠️ Submission blocked - already in progress");
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setError("");
     setSuccessMessage("");
     setIsLoading(true);
+
+    // ✅ Disable button immediately
+    if (submitButtonRef.current) {
+      submitButtonRef.current.disabled = true;
+      submitButtonRef.current.style.opacity = "0.5";
+      submitButtonRef.current.style.cursor = "not-allowed";
+    }
 
     try {
       // Test connection first if not already connected
@@ -235,8 +252,15 @@ const Login = () => {
       setTimeout(() => {
         redirectToDashboard(userData.role);
       }, 100);
+
+      // ✅ Add small delay to ensure state updates
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // ✅ Success - redirect immediately
+      redirectToDashboard(userData.role);
     } catch (err) {
       console.error("❌ Login error:", err);
+      setError(err.message || "Login failed");
 
       // Handle different types of errors
       let errorMessage = "";
@@ -262,6 +286,14 @@ const Login = () => {
       setError(errorMessage);
     } finally {
       setIsLoading(false);
+      isSubmittingRef.current = false;
+
+      // ✅ Re-enable button
+      if (submitButtonRef.current) {
+        submitButtonRef.current.disabled = false;
+        submitButtonRef.current.style.opacity = "1";
+        submitButtonRef.current.style.cursor = "pointer";
+      }
     }
   };
 
