@@ -348,6 +348,45 @@ class EmailService {
   }
 
   /**
+   * Send email via Resend
+   */
+  async sendEmailWithResend(options) {
+    try {
+      const { to, subject, text, html, from } = options;
+
+      const fromAddress = from || "School Management System <noreply@resend.dev>";
+
+      const { data, error } = await this.resendClient.emails.send({
+        from: fromAddress,
+        to: Array.isArray(to) ? to : [to],
+        subject: subject,
+        text: text,
+        html: html,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      logger.info("Email sent successfully via Resend:", {
+        messageId: data.id,
+        to: to,
+        subject: subject,
+      });
+
+      return {
+        success: true,
+        messageId: data.id,
+        mode: "resend",
+        provider: "Resend API",
+      };
+    } catch (error) {
+      logger.error("Failed to send email via Resend:", error);
+      return { success: false, error: error.message, mode: "resend" };
+    }
+  }
+
+  /**
    * Send welcome email with professional styling
    * @param {Object} data - Email data
    * @param {string} to - Recipient email
