@@ -388,28 +388,27 @@ class EmailService {
    */
   async sendEmailWithResend(options) {
     try {
-      const { to, subject, text, html, from } = options;
+      const { to, subject, text, html } = options;
 
-      // Use a verified sender address for Resend
-      const fromAddress = from || "School Management System <onboarding@resend.dev>";
+      // Use the verified onboarding sender (as shown in your Resend dashboard)
+      const fromAddress = "onboarding@resend.dev";
 
       const { data, error } = await this.resendClient.emails.send({
         from: fromAddress,
         to: Array.isArray(to) ? to : [to],
         subject: subject,
-        text: text,
-        html: html,
+        text: text || "Please view this email in HTML mode.",
+        html: html || `<p>${text}</p>`,
       });
 
       if (error) {
-        throw new Error(`Resend API Error: ${error.message}`);
+        throw new Error(`Resend API Error: ${error.message || JSON.stringify(error)}`);
       }
 
-      logger.info("✅ Email sent successfully via Resend:", {
+      logger.info("Email sent successfully via Resend:", {
         messageId: data.id,
         to: to,
         subject: subject,
-        mode: "resend",
       });
 
       return {
@@ -419,11 +418,10 @@ class EmailService {
         provider: "Resend API",
       };
     } catch (error) {
-      logger.error("❌ Failed to send email via Resend:", {
+      logger.error("Failed to send email via Resend:", {
         error: error.message,
         to: options.to,
         subject: options.subject,
-        mode: "resend",
       });
 
       return {
