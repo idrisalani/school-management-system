@@ -122,4 +122,14 @@ router.post("/reset", async (req, res) => {
   }
 });
 
+router.get("/env-test", (req, res) => {
+  res.json({
+    GMAIL_USER: process.env.GMAIL_USER || "NOT_SET",
+    GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD
+      ? `SET (${process.env.GMAIL_APP_PASSWORD.length} chars)`
+      : "NOT_SET",
+    NODE_ENV: process.env.NODE_ENV,
+  });
+});
+
 export default router;

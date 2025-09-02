@@ -79,6 +79,12 @@ class EmailService {
    */
   async initializeGmailSMTP(config) {
     try {
+      console.log("🔍 DEBUG: Gmail SMTP config:", {
+        gmailUser: config.gmailUser,
+        hasGmailPassword: !!config.gmailPassword,
+        passwordLength: config.gmailPassword?.length || 0,
+      });
+
       const transportConfig = {
         service: "gmail",
         auth: {
@@ -92,8 +98,12 @@ class EmailService {
 
       this.transporter = nodemailer.createTransporter(transportConfig);
 
+      console.log("🔍 DEBUG: About to verify Gmail connection...");
+
       // Verify Gmail connection
       await this.transporter.verify();
+
+      console.log("✅ DEBUG: Gmail verification successful!");
 
       this.isConfigured = true;
       this.mode = "gmail";
@@ -104,6 +114,12 @@ class EmailService {
         mode: "production",
       });
     } catch (error) {
+      console.error("❌ DEBUG: Gmail SMTP failed:", {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+      });
+
       logger.warn("Gmail SMTP failed, falling back to generic SMTP:", error.message);
       // Try generic SMTP as fallback
       if (config.host && config.user && config.pass) {
