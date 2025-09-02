@@ -1,12 +1,12 @@
-// server/src/services/email.service.js - ES6 Version
+// server/src/services/email.service.js - Clean Brevo-Only Version
 import SibApiV3Sdk from "sib-api-v3-sdk";
 
 class EmailService {
   constructor() {
-    this.brevoClient = null;
     this.apiInstance = null;
     this.isConfigured = false;
     this.mode = "unknown";
+    this.initError = null;
     this.init();
   }
 
@@ -19,16 +19,16 @@ class EmailService {
 
     switch (level.toLowerCase()) {
       case "error":
-        console.error(`[${timestamp}] [ERROR] ${message}${metaStr}`);
+        console.error(`[${timestamp}] [EMAIL-ERROR] ${message}${metaStr}`);
         break;
       case "warn":
-        console.warn(`[${timestamp}] [WARN] ${message}${metaStr}`);
+        console.warn(`[${timestamp}] [EMAIL-WARN] ${message}${metaStr}`);
         break;
       case "info":
-        console.log(`[${timestamp}] [INFO] ${message}${metaStr}`);
+        console.log(`[${timestamp}] [EMAIL-INFO] ${message}${metaStr}`);
         break;
       default:
-        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}${metaStr}`);
+        console.log(`[${timestamp}] [EMAIL-${level.toUpperCase()}] ${message}${metaStr}`);
     }
   }
 
@@ -40,14 +40,14 @@ class EmailService {
       const apiKey = process.env.BREVO_API_KEY;
 
       if (!apiKey) {
-        console.warn("⚠️ BREVO_API_KEY not found, email service will use mock mode");
-        this.initMockMode();
+        this.log("warn", "BREVO_API_KEY not found, using mock mode");
+        this.initMockMode("No API key provided");
         return;
       }
 
       if (!apiKey.startsWith("xkeysib-")) {
-        console.warn("⚠️ Invalid Brevo API key format (should start with xkeysib-)");
-        this.initMockMode();
+        this.log("warn", "Invalid Brevo API key format");
+        this.initMockMode("Invalid API key format");
         return;
       }
 
@@ -60,22 +60,21 @@ class EmailService {
       this.isConfigured = true;
       this.mode = "brevo";
 
-      console.log("✅ Brevo email service initialized successfully");
-      this.log("info", "Brevo email service initialized", { mode: "brevo" });
+      this.log("info", "Brevo email service initialized successfully");
     } catch (error) {
-      console.error("❌ Brevo initialization failed:", error.message);
       this.log("error", "Brevo initialization failed", { error: error.message });
-      this.initMockMode();
+      this.initMockMode(error.message);
     }
   }
 
   /**
    * Initialize mock mode for development/fallback
    */
-  initMockMode() {
+  initMockMode(reason = "Unknown") {
     this.isConfigured = true;
     this.mode = "mock";
-    console.log("📧 Email service in mock mode (will log emails instead of sending)");
+    this.initError = reason;
+    this.log("info", "Email service in mock mode", { reason });
   }
 
   /**
@@ -85,7 +84,7 @@ class EmailService {
     try {
       const { to, subject, html, text } = options;
 
-      console.log(`📧 Sending email [${this.mode}]:`, {
+      this.log("info", "Sending email", {
         to: to,
         subject: subject,
         mode: this.mode,
@@ -101,7 +100,6 @@ class EmailService {
 
       throw new Error(`Unknown email mode: ${this.mode}`);
     } catch (error) {
-      console.error("❌ Failed to send email:", error.message);
       this.log("error", "Email send failed", {
         error: error.message,
         to: options.to,
@@ -137,11 +135,10 @@ class EmailService {
 
       const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
 
-      console.log("✅ Brevo email sent successfully:", result.response.statusCode);
-      this.log("info", "Brevo email sent", {
+      this.log("info", "Brevo email sent successfully", {
+        statusCode: result.response.statusCode,
         messageId: result.response.body?.messageId,
         to: to,
-        subject: subject,
       });
 
       return {
@@ -151,7 +148,7 @@ class EmailService {
         mode: "brevo",
       };
     } catch (error) {
-      console.error("❌ Brevo send failed:", error.message);
+      this.log("error", "Brevo send failed", { error: error.message });
 
       let errorMessage = error.message;
       if (error.response && error.response.text) {
@@ -177,17 +174,12 @@ class EmailService {
   async sendMockEmail(options) {
     const { to, subject, text, html } = options;
 
-    console.log("\n📧 MOCK EMAIL SENT:");
-    console.log("To:", to);
-    console.log("Subject:", subject);
-    console.log("Text Preview:", text?.substring(0, 100) + "...");
-    console.log("Has HTML:", !!html);
-    console.log("─────────────────────────\n");
-
-    this.log("info", "Mock email sent", {
+    this.log("info", "MOCK EMAIL SENT", {
       to: to,
       subject: subject,
-      mode: "mock",
+      textPreview: text?.substring(0, 100),
+      hasHtml: !!html,
+      reason: this.initError,
     });
 
     return {
@@ -195,6 +187,7 @@ class EmailService {
       messageId: `mock-${Date.now()}`,
       provider: "Mock Service",
       mode: "mock",
+      note: "This is a mock email - no actual email was sent",
     };
   }
 
@@ -417,6 +410,7 @@ The School Management Team
           <p><strong>Mode:</strong> ${this.mode}</p>
           <p><strong>Configured:</strong> ${this.isConfigured ? "Yes" : "No"}</p>
           <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+          ${this.mode === "mock" ? `<p><strong>Mock Reason:</strong> ${this.initError}</p>` : ""}
         </div>
         <p style="color: #28a745; font-weight: bold;">✅ If you received this email, the service is working!</p>
       </div>
@@ -429,6 +423,7 @@ Service Status:
 - Mode: ${this.mode}
 - Configured: ${this.isConfigured ? "Yes" : "No"}  
 - Time: ${new Date().toISOString()}
+${this.mode === "mock" ? `- Mock Reason: ${this.initError}` : ""}
 
 ✅ If you received this email, the service is working!
     `;
@@ -454,6 +449,11 @@ Service Status:
           ? "Valid"
           : "Invalid"
         : "Missing",
+      initError: this.initError,
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: !!process.env.VERCEL,
+      },
     };
   }
 }
