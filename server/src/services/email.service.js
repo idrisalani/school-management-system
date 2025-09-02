@@ -1,19 +1,5 @@
-// server/src/services/email.service.js - Updated with fallback logger
+// server/src/services/email.service.js - Clean Version with No External Dependencies
 const SibApiV3Sdk = require("sib-api-v3-sdk");
-
-// Simple fallback logger if the main logger doesn't work
-let logger;
-try {
-  logger = require("../utils/logger");
-} catch (error) {
-  console.warn("Could not import logger, using console fallback");
-  logger = {
-    info: (msg, meta) => console.log(`[INFO] ${msg}`, meta || ""),
-    error: (msg, meta) => console.error(`[ERROR] ${msg}`, meta || ""),
-    warn: (msg, meta) => console.warn(`[WARN] ${msg}`, meta || ""),
-    debug: (msg, meta) => console.log(`[DEBUG] ${msg}`, meta || ""),
-  };
-}
 
 class EmailService {
   constructor() {
@@ -22,6 +8,28 @@ class EmailService {
     this.isConfigured = false;
     this.mode = "unknown";
     this.init();
+  }
+
+  /**
+   * Simple logging without external dependencies
+   */
+  log(level, message, meta = {}) {
+    const timestamp = new Date().toISOString();
+    const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
+
+    switch (level.toLowerCase()) {
+      case "error":
+        console.error(`[${timestamp}] [ERROR] ${message}${metaStr}`);
+        break;
+      case "warn":
+        console.warn(`[${timestamp}] [WARN] ${message}${metaStr}`);
+        break;
+      case "info":
+        console.log(`[${timestamp}] [INFO] ${message}${metaStr}`);
+        break;
+      default:
+        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}${metaStr}`);
+    }
   }
 
   /**
@@ -53,10 +61,10 @@ class EmailService {
       this.mode = "brevo";
 
       console.log("✅ Brevo email service initialized successfully");
-      logger.info("Brevo email service initialized", { mode: "brevo" });
+      this.log("info", "Brevo email service initialized", { mode: "brevo" });
     } catch (error) {
       console.error("❌ Brevo initialization failed:", error.message);
-      logger.error("Brevo initialization failed", { error: error.message });
+      this.log("error", "Brevo initialization failed", { error: error.message });
       this.initMockMode();
     }
   }
@@ -75,7 +83,7 @@ class EmailService {
    */
   async sendEmail(options) {
     try {
-      const { to, subject, html, text, from } = options;
+      const { to, subject, html, text } = options;
 
       console.log(`📧 Sending email [${this.mode}]:`, {
         to: to,
@@ -94,7 +102,7 @@ class EmailService {
       throw new Error(`Unknown email mode: ${this.mode}`);
     } catch (error) {
       console.error("❌ Failed to send email:", error.message);
-      logger.error("Email send failed", {
+      this.log("error", "Email send failed", {
         error: error.message,
         to: options.to,
         subject: options.subject,
@@ -130,7 +138,7 @@ class EmailService {
       const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
 
       console.log("✅ Brevo email sent successfully:", result.response.statusCode);
-      logger.info("Brevo email sent", {
+      this.log("info", "Brevo email sent", {
         messageId: result.response.body?.messageId,
         to: to,
         subject: subject,
@@ -176,7 +184,7 @@ class EmailService {
     console.log("Has HTML:", !!html);
     console.log("─────────────────────────\n");
 
-    logger.info("Mock email sent", {
+    this.log("info", "Mock email sent", {
       to: to,
       subject: subject,
       mode: "mock",
@@ -196,7 +204,7 @@ class EmailService {
   async sendWelcomeEmail(userData, recipientEmail) {
     const { name, username, role } = userData;
 
-    const subject = `Welcome to School Management System`;
+    const subject = "Welcome to School Management System";
 
     const html = `
       <!DOCTYPE html>
@@ -271,6 +279,116 @@ Login Details:
 - Role: ${role}
 
 You can now log in and start using the system.
+
+Best regards,
+The School Management Team
+    `;
+
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: subject,
+      html: html,
+      text: text,
+    });
+  }
+
+  /**
+   * Send password reset email
+   */
+  async sendPasswordResetEmail(resetData, recipientEmail) {
+    const { resetLink, name } = resetData;
+
+    const subject = "Password Reset - School Management System";
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Password Reset Request</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px;
+          }
+          .header { 
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+            color: white; 
+            padding: 30px; 
+            text-align: center; 
+            border-radius: 10px 10px 0 0;
+          }
+          .content { 
+            background: white; 
+            padding: 30px; 
+            border: 1px solid #ddd;
+            border-radius: 0 0 10px 10px;
+          }
+          .button { 
+            display: inline-block; 
+            background: #f56565; 
+            color: white; 
+            padding: 12px 24px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            margin: 20px 0;
+          }
+          .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Password Reset Request</h1>
+        </div>
+        <div class="content">
+          <p>Hello ${name},</p>
+          
+          <p>You requested to reset your password for your School Management System account.</p>
+          
+          <p>Click the button below to reset your password:</p>
+          
+          <a href="${resetLink}" class="button">Reset Password</a>
+          
+          <div class="warning">
+            <p><strong>Important:</strong></p>
+            <ul>
+              <li>This link expires in 1 hour</li>
+              <li>If you didn't request this, ignore this email</li>
+              <li>Your current password remains unchanged until you use this link</li>
+            </ul>
+          </div>
+          
+          <p>If the button doesn't work, copy this link: ${resetLink}</p>
+          
+          <p>Best regards,<br>The School Management Team</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Password Reset Request - School Management System
+
+Hello ${name},
+
+You requested to reset your password for your School Management System account.
+
+To reset your password, visit: ${resetLink}
+
+Important:
+- This link expires in 1 hour
+- If you didn't request this, ignore this email  
+- Your current password remains unchanged until you use this link
 
 Best regards,
 The School Management Team
