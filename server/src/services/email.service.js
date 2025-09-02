@@ -27,19 +27,31 @@ class EmailService {
       const config = this.getEmailConfiguration();
       this.config = config;
 
+      logger.info("Email service configuration check:", {
+        hasResendApiKey: !!config.resendApiKey,
+        hasGmailUser: !!config.gmailUser,
+        hasGmailPassword: !!config.gmailPassword,
+      });
+
       // PRIORITY Strategy 1: Resend (if configured)
       if (config.resendApiKey) {
         const resendSuccess = await this.initializeResend(config);
         if (resendSuccess) return;
       }
 
-      // Strategy 2: Gmail SMTP (fallback)
+      // Strategy 2: Gmail SMTP (if configured)
       if (config.gmailUser && config.gmailPassword) {
         await this.initializeGmailSMTP(config);
         return;
       }
 
-      // Strategy 3: Mock mode (always works)
+      // Strategy 3: Development mode (console logging)
+      if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev") {
+        this.initializeDevelopmentMode();
+        return;
+      }
+
+      // Strategy 4: Mock mode (always works, logs instead of sending)
       this.initializeMockMode();
     } catch (error) {
       logger.error("Email service initialization failed, falling back to mock mode:", error);
@@ -59,7 +71,7 @@ class EmailService {
       gmailUser: process.env.GMAIL_USER,
       gmailPassword: process.env.GMAIL_APP_PASSWORD,
 
-      // Other configs...
+      // Generic SMTP Configuration (Fallback)
       host: process.env.SMTP_HOST || process.env.EMAIL_HOST,
       port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || "587"),
       secure: (process.env.SMTP_SECURE || process.env.EMAIL_SECURE) === "true",
@@ -155,16 +167,34 @@ class EmailService {
    */
   async initializeResend(config) {
     try {
+      if (!config.resendApiKey) {
+        logger.info("No Resend API key found, skipping Resend initialization");
+        return false;
+      }
+
+      logger.info("Initializing Resend email service...");
+
+      // Import Resend dynamically
       const { Resend } = await import("resend");
       this.resendClient = new Resend(config.resendApiKey);
+
+      // Test connection by checking API key validity
+      // Note: We'll test on first send rather than during initialization
 
       this.isConfigured = true;
       this.mode = "resend";
 
-      logger.info("📧 Resend email service initialized successfully");
+      logger.info("📧 Resend email service initialized successfully", {
+        service: "resend",
+        mode: "production",
+      });
+
       return true;
     } catch (error) {
-      logger.error("Resend initialization failed:", error);
+      logger.error("Resend initialization failed:", {
+        error: error.message,
+        hasApiKey: !!config.resendApiKey,
+      });
       return false;
     }
   }
@@ -279,14 +309,20 @@ class EmailService {
         await this.initializeTransporter();
       }
 
+      const { to, subject, text, html, from, replyTo, attachments, cc, bcc } = options;
+
+      logger.info(`📧 Attempting to send email [${this.mode}]:`, {
+        to: to,
+        subject: subject,
+        mode: this.mode,
+      });
+
       // Use Resend if configured
       if (this.mode === "resend") {
         return await this.sendEmailWithResend(options);
       }
 
       // Otherwise use existing nodemailer logic
-      const { to, subject, text, html, from, replyTo, attachments, cc, bcc } = options;
-
       // Use Gmail user as default sender, then fallback to configured options
       const fromAddress =
         from ||
@@ -354,7 +390,8 @@ class EmailService {
     try {
       const { to, subject, text, html, from } = options;
 
-      const fromAddress = from || "School Management System <noreply@resend.dev>";
+      // Use a verified sender address for Resend
+      const fromAddress = from || "School Management System <onboarding@resend.dev>";
 
       const { data, error } = await this.resendClient.emails.send({
         from: fromAddress,
@@ -365,13 +402,14 @@ class EmailService {
       });
 
       if (error) {
-        throw new Error(error.message);
+        throw new Error(`Resend API Error: ${error.message}`);
       }
 
-      logger.info("Email sent successfully via Resend:", {
+      logger.info("✅ Email sent successfully via Resend:", {
         messageId: data.id,
         to: to,
         subject: subject,
+        mode: "resend",
       });
 
       return {
@@ -381,8 +419,18 @@ class EmailService {
         provider: "Resend API",
       };
     } catch (error) {
-      logger.error("Failed to send email via Resend:", error);
-      return { success: false, error: error.message, mode: "resend" };
+      logger.error("❌ Failed to send email via Resend:", {
+        error: error.message,
+        to: options.to,
+        subject: options.subject,
+        mode: "resend",
+      });
+
+      return {
+        success: false,
+        error: error.message,
+        mode: "resend",
+      };
     }
   }
 
