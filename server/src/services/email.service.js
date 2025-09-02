@@ -75,14 +75,14 @@ class EmailService {
   }
 
   /**
-   * Initialize Gmail SMTP transporter (PRIMARY METHOD)
+   * Initialize Gmail SMTP transporter (ROBUST SERVERLESS VERSION)
    */
   async initializeGmailSMTP(config) {
     try {
-      console.log("🔍 DEBUG: Gmail SMTP config:", {
+      console.log("🔍 DEBUG: Starting Gmail SMTP initialization...", {
         gmailUser: config.gmailUser,
-        hasGmailPassword: !!config.gmailPassword,
-        passwordLength: config.gmailPassword?.length || 0,
+        hasPassword: !!config.gmailPassword,
+        passwordLength: config.gmailPassword?.length,
       });
 
       const transportConfig = {
@@ -91,18 +91,44 @@ class EmailService {
           user: config.gmailUser,
           pass: config.gmailPassword,
         },
+        // More robust settings for serverless
+        pool: false, // Disable connection pooling for serverless
+        maxConnections: 1,
+        maxMessages: 1,
+        rateDelta: 1000,
+        rateLimit: 1,
         tls: {
           rejectUnauthorized: false,
         },
+        connectionTimeout: 10000, // 10 second timeout
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        // Alternative: use direct SMTP instead of service shortcut
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false, // Use STARTTLS
       };
 
       this.transporter = nodemailer.createTransporter(transportConfig);
 
-      console.log("🔍 DEBUG: About to verify Gmail connection...");
+      // Skip verification in serverless - it often fails due to cold starts
+      // We'll test the connection on first actual send instead
+      if (process.env.VERCEL) {
+        console.log("📧 Skipping Gmail verification in serverless environment");
+        this.isConfigured = true;
+        this.mode = "gmail";
 
-      // Verify Gmail connection
+        logger.info("📧 Gmail SMTP initialized successfully (serverless mode)", {
+          user: config.gmailUser?.substring(0, 3) + "***",
+          service: "gmail",
+          skipVerification: true,
+        });
+        return;
+      }
+
+      // Only verify in non-serverless environments
+      console.log("🔍 DEBUG: Attempting Gmail verification...");
       await this.transporter.verify();
-
       console.log("✅ DEBUG: Gmail verification successful!");
 
       this.isConfigured = true;
@@ -111,22 +137,20 @@ class EmailService {
       logger.info("📧 Gmail SMTP initialized successfully", {
         user: config.gmailUser?.substring(0, 3) + "***",
         service: "gmail",
-        mode: "production",
+        verified: true,
       });
     } catch (error) {
-      console.error("❌ DEBUG: Gmail SMTP failed:", {
+      console.error("❌ DEBUG: Gmail SMTP initialization failed:", {
         message: error.message,
         code: error.code,
         command: error.command,
+        stack: error.stack,
       });
 
-      logger.warn("Gmail SMTP failed, falling back to generic SMTP:", error.message);
-      // Try generic SMTP as fallback
-      if (config.host && config.user && config.pass) {
-        await this.initializeProductionSMTP(config);
-      } else {
-        this.initializeDevelopmentMode();
-      }
+      logger.warn("Gmail SMTP failed, falling back to development mode:", error.message);
+
+      // Fall back to development mode instead of trying other SMTP
+      this.initializeDevelopmentMode();
     }
   }
 
