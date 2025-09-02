@@ -20,7 +20,124 @@ class EmailService {
   }
 
   /**
-   * Initialize email transporter with Resend priority
+   * Initialize Brevo email service
+   */
+  async initializeBrevo(config) {
+    try {
+      if (!config.brevoApiKey) {
+        logger.info("No Brevo API key found, skipping Brevo initialization");
+        return false;
+      }
+
+      logger.info("Initializing Brevo email service...");
+
+      // Import Brevo SDK dynamically
+      const SibApiV3Sdk = await import("@sendinblue/client");
+
+      // Initialize Brevo client
+      this.brevoClient = SibApiV3Sdk.default;
+      this.brevoApiInstance = new this.brevoClient.TransactionalEmailsApi();
+
+      // Set API key
+      const apiKey = this.brevoClient.ApiClient.instance.authentications["api-key"];
+      apiKey.apiKey = config.brevoApiKey;
+
+      this.isConfigured = true;
+      this.mode = "brevo";
+
+      logger.info("📧 Brevo email service initialized successfully", {
+        service: "brevo",
+        mode: "production",
+      });
+
+      return true;
+    } catch (error) {
+      logger.error("Brevo initialization failed:", {
+        error: error.message,
+        hasApiKey: !!config.brevoApiKey,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send email via Brevo API
+   */
+  async sendEmailWithBrevo(options) {
+    try {
+      const { to, subject, text, html, from } = options;
+
+      // Use your email address as sender
+      const fromAddress = from || "idris.alamutu@outlook.com";
+      const fromName = "School Management System";
+
+      // Prepare email data for Brevo
+      const sendSmtpEmail = new this.brevoClient.SendSmtpEmail();
+
+      sendSmtpEmail.sender = {
+        name: fromName,
+        email: fromAddress,
+      };
+
+      sendSmtpEmail.to = Array.isArray(to)
+        ? to.map((email) => ({ email: email }))
+        : [{ email: to }];
+
+      sendSmtpEmail.subject = subject;
+      sendSmtpEmail.textContent = text || "Please view this email in HTML mode.";
+      sendSmtpEmail.htmlContent = html || `<p>${text || "Email from School Management System"}</p>`;
+
+      console.log("Brevo send attempt:", {
+        to: sendSmtpEmail.to,
+        from: sendSmtpEmail.sender,
+        subject: sendSmtpEmail.subject,
+      });
+
+      const result = await this.brevoApiInstance.sendTransacEmail(sendSmtpEmail);
+
+      logger.info("✅ Email sent successfully via Brevo:", {
+        messageId: result.response.body.messageId,
+        to: to,
+        subject: subject,
+        mode: "brevo",
+      });
+
+      return {
+        success: true,
+        messageId: result.response.body.messageId,
+        mode: "brevo",
+        provider: "Brevo API",
+      };
+    } catch (error) {
+      console.error("Brevo send error:", error);
+
+      let errorMessage = error.message;
+      if (error.response && error.response.text) {
+        try {
+          const errorBody = JSON.parse(error.response.text);
+          errorMessage = errorBody.message || errorBody.code || errorMessage;
+        } catch (parseError) {
+          errorMessage = error.response.text || errorMessage;
+        }
+      }
+
+      logger.error("❌ Failed to send email via Brevo:", {
+        error: errorMessage,
+        to: options.to,
+        subject: options.subject,
+        mode: "brevo",
+      });
+
+      return {
+        success: false,
+        error: errorMessage,
+        mode: "brevo",
+      };
+    }
+  }
+
+  /**
+   * Initialize email transporter with Brevo priority
    */
   async initializeTransporter() {
     try {
@@ -28,30 +145,44 @@ class EmailService {
       this.config = config;
 
       logger.info("Email service configuration check:", {
+        hasBrevoApiKey: !!config.brevoApiKey,
+        hasSendGridApiKey: !!config.sendgridApiKey,
         hasResendApiKey: !!config.resendApiKey,
         hasGmailUser: !!config.gmailUser,
         hasGmailPassword: !!config.gmailPassword,
       });
 
-      // PRIORITY Strategy 1: Resend (if configured)
+      // PRIORITY Strategy 1: Brevo (if configured)
+      if (config.brevoApiKey) {
+        const brevoSuccess = await this.initializeBrevo(config);
+        if (brevoSuccess) return;
+      }
+
+      // Strategy 2: SendGrid (if configured)
+      if (config.sendgridApiKey) {
+        const sendgridSuccess = await this.initializeSendGrid(config);
+        if (sendgridSuccess) return;
+      }
+
+      // Strategy 3: Resend (if configured)
       if (config.resendApiKey) {
         const resendSuccess = await this.initializeResend(config);
         if (resendSuccess) return;
       }
 
-      // Strategy 2: Gmail SMTP (if configured)
+      // Strategy 4: Gmail SMTP (if configured)
       if (config.gmailUser && config.gmailPassword) {
         await this.initializeGmailSMTP(config);
         return;
       }
 
-      // Strategy 3: Development mode (console logging)
+      // Strategy 5: Development mode (console logging)
       if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev") {
         this.initializeDevelopmentMode();
         return;
       }
 
-      // Strategy 4: Mock mode (always works, logs instead of sending)
+      // Strategy 6: Mock mode (always works, logs instead of sending)
       this.initializeMockMode();
     } catch (error) {
       logger.error("Email service initialization failed, falling back to mock mode:", error);
@@ -64,10 +195,16 @@ class EmailService {
    */
   getEmailConfiguration() {
     return {
-      // Resend Configuration (Priority)
+      // Brevo Configuration (NEW PRIORITY)
+      brevoApiKey: process.env.BREVO_API_KEY,
+
+      // SendGrid Configuration (if you had it)
+      sendgridApiKey: process.env.SENDGRID_API_KEY,
+
+      // Resend Configuration
       resendApiKey: process.env.RESEND_API_KEY,
 
-      // Gmail SMTP Configuration (Fallback)
+      // Gmail SMTP Configuration
       gmailUser: process.env.GMAIL_USER,
       gmailPassword: process.env.GMAIL_APP_PASSWORD,
 
@@ -317,13 +454,22 @@ class EmailService {
         mode: this.mode,
       });
 
+      // Use Brevo if configured
+      if (this.mode === "brevo") {
+        return await this.sendEmailWithBrevo(options);
+      }
+
+      // Use SendGrid if configured
+      if (this.mode === "sendgrid") {
+        return await this.sendEmailWithSendGrid(options);
+      }
+
       // Use Resend if configured
       if (this.mode === "resend") {
         return await this.sendEmailWithResend(options);
       }
 
-      // Otherwise use existing nodemailer logic
-      // Use Gmail user as default sender, then fallback to configured options
+      // Otherwise use existing nodemailer logic for Gmail/other SMTP
       const fromAddress =
         from ||
         this.config?.gmailUser ||
@@ -342,13 +488,6 @@ class EmailService {
         cc: cc,
         bcc: bcc,
       };
-
-      logger.info(`📧 Sending email [${this.mode}]:`, {
-        to: to,
-        subject: subject,
-        from: fromAddress,
-        mode: this.mode,
-      });
 
       const result = await this.transporter.sendMail(mailOptions);
 
@@ -374,7 +513,6 @@ class EmailService {
         mode: this.mode,
       });
 
-      // Return error but don't throw to avoid breaking main application flow
       return {
         success: false,
         error: error.message,
