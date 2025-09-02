@@ -1,4 +1,4 @@
-// server/src/routes/test-email.js - TypeScript Fixed Version
+// server/src/routes/test-email.js - Fixed Version
 import express from "express";
 import emailService from "../services/email.service.js";
 import logger from "../utils/logger.js";
@@ -13,7 +13,7 @@ const getStringParam = (param, defaultValue = "") => {
 };
 
 /**
- * Test email endpoint to verify Gmail SMTP is working
+ * Test email endpoint to verify Brevo API is working
  * GET /api/v1/test-email?to=email@example.com
  */
 router.get("/", async (req, res) => {
@@ -38,15 +38,16 @@ router.get("/", async (req, res) => {
 
     logger.info("Test email result:", result);
 
-    // Return comprehensive response
+    // Return comprehensive response without Gmail references
     return res.json({
       success: result.success,
       message: result.success ? "Test email sent successfully!" : "Test email failed",
       emailService: {
         configured: serviceStatus.configured,
         mode: serviceStatus.mode,
-        provider: serviceStatus.provider,
-        gmailUser: serviceStatus.config.gmailUser,
+        hasApiKey: serviceStatus.hasApiKey,
+        apiKeyFormat: serviceStatus.apiKeyFormat,
+        initError: serviceStatus.initError,
       },
       emailResult: {
         messageId: result.messageId,
@@ -122,13 +123,17 @@ router.post("/reset", async (req, res) => {
   }
 });
 
+/**
+ * Get email service environment info
+ */
 router.get("/env-test", (req, res) => {
   res.json({
-    GMAIL_USER: process.env.GMAIL_USER || "NOT_SET",
-    GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD
-      ? `SET (${process.env.GMAIL_APP_PASSWORD.length} chars)`
+    BREVO_API_KEY: process.env.BREVO_API_KEY
+      ? `SET (${process.env.BREVO_API_KEY.length} chars, starts with: ${process.env.BREVO_API_KEY.substring(0, 8)}...)`
       : "NOT_SET",
+    CLIENT_URL: process.env.CLIENT_URL || "NOT_SET",
     NODE_ENV: process.env.NODE_ENV,
+    VERCEL: process.env.VERCEL || "false",
   });
 });
 

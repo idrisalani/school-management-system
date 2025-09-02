@@ -135,35 +135,58 @@ class EmailService {
 
       const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
 
+      // Handle different possible response structures
+      const statusCode = result?.response?.statusCode || result?.statusCode || "unknown";
+      const messageId =
+        result?.response?.body?.messageId ||
+        result?.body?.messageId ||
+        result?.messageId ||
+        `brevo-${Date.now()}`;
+
       this.log("info", "Brevo email sent successfully", {
-        statusCode: result.response.statusCode,
-        messageId: result.response.body?.messageId,
+        statusCode: statusCode,
+        messageId: messageId,
         to: to,
+        resultStructure: Object.keys(result || {}).join(","),
       });
 
       return {
         success: true,
-        messageId: result.response.body?.messageId,
+        messageId: messageId,
         provider: "Brevo API",
         mode: "brevo",
+        statusCode: statusCode,
       };
     } catch (error) {
-      this.log("error", "Brevo send failed", { error: error.message });
+      this.log("error", "Brevo send failed", {
+        error: error.message,
+        errorType: error.constructor.name,
+        statusCode: error.status || error.statusCode || "unknown",
+      });
 
       let errorMessage = error.message;
-      if (error.response && error.response.text) {
-        try {
-          const errorBody = JSON.parse(error.response.text);
-          errorMessage = errorBody.message || errorBody.code || errorMessage;
-        } catch (parseError) {
-          errorMessage = error.response.text;
+
+      // Handle different error response structures
+      if (error.response) {
+        if (error.response.text) {
+          try {
+            const errorBody = JSON.parse(error.response.text);
+            errorMessage = errorBody.message || errorBody.code || errorBody.error || errorMessage;
+          } catch (parseError) {
+            errorMessage = error.response.text;
+          }
+        } else if (error.response.data) {
+          errorMessage = error.response.data.message || error.response.data.error || errorMessage;
         }
+      } else if (error.body) {
+        errorMessage = error.body.message || error.body.error || errorMessage;
       }
 
       return {
         success: false,
         error: `Brevo API Error: ${errorMessage}`,
         mode: "brevo",
+        statusCode: error.status || error.statusCode || "unknown",
       };
     }
   }
