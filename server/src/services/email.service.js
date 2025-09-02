@@ -20,33 +20,26 @@ class EmailService {
   }
 
   /**
-   * Initialize email transporter with Gmail SMTP priority
+   * Initialize email transporter with Resend priority
    */
   async initializeTransporter() {
     try {
-      // Get configuration from multiple possible environment variable formats
       const config = this.getEmailConfiguration();
       this.config = config;
 
-      // PRIORITY Strategy 1: Gmail SMTP (if configured)
+      // PRIORITY Strategy 1: Resend (if configured)
+      if (config.resendApiKey) {
+        const resendSuccess = await this.initializeResend(config);
+        if (resendSuccess) return;
+      }
+
+      // Strategy 2: Gmail SMTP (fallback)
       if (config.gmailUser && config.gmailPassword) {
         await this.initializeGmailSMTP(config);
         return;
       }
 
-      // Strategy 2: Production SMTP (if fully configured)
-      if (config.host && config.user && config.pass) {
-        await this.initializeProductionSMTP(config);
-        return;
-      }
-
-      // Strategy 3: Development mode (console logging)
-      if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev") {
-        this.initializeDevelopmentMode();
-        return;
-      }
-
-      // Strategy 4: Mock mode (always works, logs instead of sending)
+      // Strategy 3: Mock mode (always works)
       this.initializeMockMode();
     } catch (error) {
       logger.error("Email service initialization failed, falling back to mock mode:", error);
@@ -55,15 +48,18 @@ class EmailService {
   }
 
   /**
-   * Get email configuration from environment variables (supports multiple formats)
+   * Get email configuration including Resend
    */
   getEmailConfiguration() {
     return {
-      // Gmail SMTP Configuration (Priority)
+      // Resend Configuration (Priority)
+      resendApiKey: process.env.RESEND_API_KEY,
+
+      // Gmail SMTP Configuration (Fallback)
       gmailUser: process.env.GMAIL_USER,
       gmailPassword: process.env.GMAIL_APP_PASSWORD,
 
-      // Generic SMTP Configuration (Fallback)
+      // Other configs...
       host: process.env.SMTP_HOST || process.env.EMAIL_HOST,
       port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || "587"),
       secure: (process.env.SMTP_SECURE || process.env.EMAIL_SECURE) === "true",
@@ -151,6 +147,25 @@ class EmailService {
 
       // Fall back to development mode instead of trying other SMTP
       this.initializeDevelopmentMode();
+    }
+  }
+
+  /**
+   * Initialize Resend email service
+   */
+  async initializeResend(config) {
+    try {
+      const { Resend } = await import("resend");
+      this.resendClient = new Resend(config.resendApiKey);
+
+      this.isConfigured = true;
+      this.mode = "resend";
+
+      logger.info("📧 Resend email service initialized successfully");
+      return true;
+    } catch (error) {
+      logger.error("Resend initialization failed:", error);
+      return false;
     }
   }
 
@@ -264,6 +279,12 @@ class EmailService {
         await this.initializeTransporter();
       }
 
+      // Use Resend if configured
+      if (this.mode === "resend") {
+        return await this.sendEmailWithResend(options);
+      }
+
+      // Otherwise use existing nodemailer logic
       const { to, subject, text, html, from, replyTo, attachments, cc, bcc } = options;
 
       // Use Gmail user as default sender, then fallback to configured options
