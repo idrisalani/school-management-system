@@ -1,26 +1,112 @@
-// server/src/routes/passwordReset.routes.js - CommonJS Version
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
+// server/src/routes/passwordReset.routes.js - ES6 Version
+import express from "express";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
-// Import services with fallback handling
-let emailService;
+// Import email service with error handling
+let emailService = null;
+let emailServiceError = null;
+
 try {
-  emailService = require("../services/email.service");
+  const { default: importedEmailService } = await import("../services/email.service.js");
+  emailService = importedEmailService;
+
+  // Verify the email service has the methods we need
+  const requiredMethods = ["sendPasswordResetEmail", "sendEmail", "getStatus"];
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof emailService[method] !== "function"
+  );
+
+  if (missingMethods.length > 0) {
+    console.warn(`Email service missing methods: ${missingMethods.join(", ")}`);
+    emailServiceError = `Missing methods: ${missingMethods.join(", ")}`;
+  }
 } catch (error) {
-  console.warn("Could not import email service for password reset");
-  emailService = null;
+  console.warn("Could not import email service for password reset:", error.message);
+  emailServiceError = error.message;
 }
+
+const router = express.Router();
+
+// Create a safe email service wrapper
+const safeEmailService = {
+  isAvailable: () => !!emailService && !emailServiceError,
+
+  getStatus: () => {
+    if (!emailService || typeof emailService.getStatus !== "function") {
+      return {
+        configured: false,
+        mode: "unavailable",
+        error: emailServiceError || "Email service not loaded",
+        hasApiKey: !!process.env.BREVO_API_KEY,
+      };
+    }
+    return emailService.getStatus();
+  },
+
+  sendPasswordResetEmail: async (resetData, to) => {
+    const { resetLink, name } = resetData;
+
+    if (!emailService || typeof emailService.sendPasswordResetEmail !== "function") {
+      // Fallback to generic sendEmail if available
+      if (emailService && typeof emailService.sendEmail === "function") {
+        return await emailService.sendEmail({
+          to: to,
+          subject: "Password Reset - School Management System",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #f56565;">Password Reset Request</h2>
+              <p>Hello ${name || "User"},</p>
+              <p>You requested to reset your password for your School Management System account.</p>
+              <p>Click the link below to reset your password:</p>
+              <p><a href="${resetLink}" style="background: #f56565; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+              <p><strong>Important:</strong></p>
+              <ul>
+                <li>This link expires in 1 hour</li>
+                <li>If you didn't request this, ignore this email</li>
+              </ul>
+              <p>If the button doesn't work, copy this link: ${resetLink}</p>
+              <p>Best regards,<br>The School Management Team</p>
+            </div>
+          `,
+          text: `
+Password Reset Request - School Management System
+
+Hello ${name || "User"},
+
+You requested to reset your password. To reset your password, visit: ${resetLink}
+
+This link expires in 1 hour. If you didn't request this, ignore this email.
+
+Best regards,
+The School Management Team
+          `,
+        });
+      }
+
+      // Complete fallback - mock response
+      return {
+        success: false,
+        error: "Password reset email service not available",
+        mode: "mock",
+        mockMessage: `Would send password reset email to ${to} with link: ${resetLink}`,
+        serviceError: emailServiceError,
+      };
+    }
+
+    return await emailService.sendPasswordResetEmail(resetData, to);
+  },
+};
 
 // Simple logging
 const log = {
-  info: (message, meta = {}) => console.log(`[INFO] ${message}`, meta),
-  error: (message, meta = {}) => console.error(`[ERROR] ${message}`, meta),
-  warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
+  info: (message, meta = {}) =>
+    console.log(`[INFO] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
+  error: (message, meta = {}) =>
+    console.error(`[ERROR] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
+  warn: (message, meta = {}) =>
+    console.warn(`[WARN] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
 };
-
-const router = express.Router();
 
 // Async handler wrapper
 const asyncHandler = (fn) => (req, res, next) => {
@@ -92,7 +178,7 @@ router.post(
       await pool.query(updateQuery, [resetToken, resetTokenExpiry, user.id]);
 
       // Send password reset email
-      if (!emailService) {
+      if (!safeEmailService.isAvailable()) {
         log.error("Email service not available for password reset");
         return res.status(500).json({
           status: "error",
@@ -102,70 +188,39 @@ router.post(
 
       const resetUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password/${resetToken}`;
 
-      let emailResult;
-
-      // Try to use sendPasswordResetEmail method, fallback to generic sendEmail
-      if (typeof emailService.sendPasswordResetEmail === "function") {
-        emailResult = await emailService.sendPasswordResetEmail(
-          {
-            resetLink: resetUrl,
-            name: user.name || user.username,
-          },
-          user.email
-        );
-      } else {
-        // Fallback to generic sendEmail method
-        log.warn("sendPasswordResetEmail method not found, using generic sendEmail");
-        emailResult = await emailService.sendEmail({
-          to: user.email,
-          subject: "Password Reset - School Management System",
-          html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #f56565;">Password Reset Request</h2>
-            <p>Hello ${user.name || user.username},</p>
-            <p>You requested to reset your password for your School Management System account.</p>
-            <p>Click the link below to reset your password:</p>
-            <p><a href="${resetUrl}" style="background: #f56565; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
-            <p><strong>Important:</strong></p>
-            <ul>
-              <li>This link expires in 1 hour</li>
-              <li>If you didn't request this, ignore this email</li>
-            </ul>
-            <p>If the button doesn't work, copy this link: ${resetUrl}</p>
-            <p>Best regards,<br>The School Management Team</p>
-          </div>
-        `,
-          text: `
-Password Reset Request - School Management System
-
-Hello ${user.name || user.username},
-
-You requested to reset your password. To reset your password, visit: ${resetUrl}
-
-This link expires in 1 hour. If you didn't request this, ignore this email.
-
-Best regards,
-The School Management Team
-        `,
-        });
-      }
+      const emailResult = await safeEmailService.sendPasswordResetEmail(
+        {
+          resetLink: resetUrl,
+          name: user.name || user.username,
+        },
+        user.email
+      );
 
       if (!emailResult.success) {
         log.error("Failed to send password reset email", {
           error: emailResult.error,
           email: user.email,
         });
-        return res.status(500).json({
-          status: "error",
-          message: "Failed to send password reset email",
+
+        // Don't fail completely if email fails, but log it
+        if (emailResult.mode === "mock") {
+          log.info("Password reset email mocked", {
+            email: user.email,
+            mockMessage: emailResult.mockMessage,
+          });
+        } else {
+          return res.status(500).json({
+            status: "error",
+            message: "Failed to send password reset email",
+          });
+        }
+      } else {
+        log.info("Password reset email sent successfully", {
+          email: user.email,
+          messageId: emailResult.messageId,
+          mode: emailResult.mode,
         });
       }
-
-      log.info("Password reset email sent successfully", {
-        email: user.email,
-        messageId: emailResult.messageId,
-        mode: emailResult.mode,
-      });
 
       return res.status(200).json({
         status: "success",
@@ -347,46 +402,24 @@ router.post(
         });
       }
 
-      if (!emailService) {
+      if (!safeEmailService.isAvailable()) {
         return res.status(500).json({
           status: "error",
           message: "Email service not available",
+          serviceStatus: safeEmailService.getStatus(),
         });
       }
 
       // Send test reset email
       const testResetUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password/test-token-123`;
 
-      let emailResult;
-
-      // Try to use sendPasswordResetEmail method, fallback to generic sendEmail
-      if (typeof emailService.sendPasswordResetEmail === "function") {
-        emailResult = await emailService.sendPasswordResetEmail(
-          {
-            resetLink: testResetUrl,
-            name: "Test User",
-          },
-          email
-        );
-      } else {
-        // Fallback to generic sendEmail method
-        emailResult = await emailService.sendEmail({
-          to: email,
-          subject: "Test Password Reset - School Management System",
-          html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #f56565;">Test Password Reset Request</h2>
-            <p>Hello Test User,</p>
-            <p>This is a test password reset email from your School Management System.</p>
-            <p>Click the link below to reset your password:</p>
-            <p><a href="${testResetUrl}" style="background: #f56565; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
-            <p><strong>Note:</strong> This is a test email with a test token.</p>
-            <p>Best regards,<br>The School Management Team</p>
-          </div>
-        `,
-          text: `Test Password Reset - School Management System\n\nThis is a test password reset email.\n\nReset link: ${testResetUrl}\n\nBest regards,\nThe School Management Team`,
-        });
-      }
+      const emailResult = await safeEmailService.sendPasswordResetEmail(
+        {
+          resetLink: testResetUrl,
+          name: "Test User",
+        },
+        email
+      );
 
       return res.json({
         status: emailResult.success ? "success" : "error",
@@ -394,7 +427,7 @@ router.post(
           ? "Test password reset email sent successfully"
           : "Failed to send test email",
         emailResult: emailResult,
-        emailService: emailService.getStatus(),
+        emailService: safeEmailService.getStatus(),
       });
     } catch (error) {
       log.error("Test email error:", { error: error.message });
@@ -407,4 +440,38 @@ router.post(
   })
 );
 
-module.exports = router;
+/**
+ * Get password reset service status
+ * GET /api/password-reset/status
+ */
+router.get("/status", (req, res) => {
+  try {
+    const serviceStatus = safeEmailService.getStatus();
+
+    return res.json({
+      status: "success",
+      message: "Password reset service status",
+      emailService: {
+        available: safeEmailService.isAvailable(),
+        ...serviceStatus,
+        error: emailServiceError,
+      },
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        hasBrevoKey: !!process.env.BREVO_API_KEY,
+        hasClientUrl: !!process.env.CLIENT_URL,
+        clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    log.error("Status check error:", { error: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to get service status",
+      error: error.message,
+    });
+  }
+});
+
+export default router;

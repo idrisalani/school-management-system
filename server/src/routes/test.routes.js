@@ -1,37 +1,113 @@
-// server/src/routes/test.routes.js - Logger-Free Version
-const express = require("express");
-const router = express.Router();
+// server/src/routes/test.routes.js - ES6 Version
+import express from "express";
 
-// Import email service with fallback
-let emailService;
+// Import email service with error handling
+let emailService = null;
+let emailServiceError = null;
+
 try {
-  emailService = require("../services/email.service");
+  const { default: importedEmailService } = await import("../services/email.service.js");
+  emailService = importedEmailService;
+
+  // Verify the email service has the methods we need
+  const requiredMethods = [
+    "sendEmail",
+    "sendTestEmail",
+    "sendWelcomeEmail",
+    "sendPasswordResetEmail",
+    "getStatus",
+  ];
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof emailService[method] !== "function"
+  );
+
+  if (missingMethods.length > 0) {
+    console.warn(`Email service missing methods: ${missingMethods.join(", ")}`);
+    emailServiceError = `Missing methods: ${missingMethods.join(", ")}`;
+  }
 } catch (error) {
-  console.warn("Could not import email service for testing");
-  emailService = null;
+  console.warn("Could not import email service for testing:", error.message);
+  emailServiceError = error.message;
 }
 
-// Helper function for query params
+const router = express.Router();
+
+// Create a safe email service wrapper
+const safeEmailService = {
+  isAvailable: () => !!emailService && !emailServiceError,
+
+  getStatus: () => {
+    if (!emailService || typeof emailService.getStatus !== "function") {
+      return {
+        configured: false,
+        mode: "unavailable",
+        error: emailServiceError || "Email service not loaded",
+        hasApiKey: !!process.env.BREVO_API_KEY,
+        apiKeyFormat: process.env.BREVO_API_KEY
+          ? process.env.BREVO_API_KEY.startsWith("xkeysib-")
+            ? "Valid"
+            : "Invalid"
+          : "Missing",
+      };
+    }
+    return emailService.getStatus();
+  },
+
+  sendTestEmail: async (to) => {
+    if (!emailService || typeof emailService.sendTestEmail !== "function") {
+      return {
+        success: false,
+        error: "sendTestEmail method not available",
+        mode: "mock",
+        mockMessage: `Would send test email to ${to}`,
+        serviceError: emailServiceError,
+      };
+    }
+    return await emailService.sendTestEmail(to);
+  },
+
+  sendEmail: async (options) => {
+    if (!emailService || typeof emailService.sendEmail !== "function") {
+      return {
+        success: false,
+        error: "sendEmail method not available",
+        mode: "mock",
+        mockMessage: `Would send email: ${options.subject} to ${options.to}`,
+        serviceError: emailServiceError,
+      };
+    }
+    return await emailService.sendEmail(options);
+  },
+
+  sendWelcomeEmail: async (userData, to) => {
+    if (!emailService || typeof emailService.sendWelcomeEmail !== "function") {
+      return {
+        success: false,
+        error: "sendWelcomeEmail method not available",
+        mode: "mock",
+        mockMessage: `Would send welcome email to ${to} for user ${userData.username}`,
+        serviceError: emailServiceError,
+      };
+    }
+    return await emailService.sendWelcomeEmail(userData, to);
+  },
+};
+
+// Simple logging
+const log = {
+  info: (message, meta = {}) =>
+    console.log(`[INFO] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
+  error: (message, meta = {}) =>
+    console.error(`[ERROR] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
+  warn: (message, meta = {}) =>
+    console.warn(`[WARN] ${message}`, Object.keys(meta).length > 0 ? meta : ""),
+};
+
+// Helper for query params
 const getStringParam = (param, defaultValue = "") => {
   if (typeof param === "string") return param;
   if (Array.isArray(param)) return param[0] || defaultValue;
   return defaultValue;
-};
-
-// Simple logging functions to replace logger
-const log = {
-  info: (message, meta = {}) => {
-    console.log(`[INFO] ${message}`, Object.keys(meta).length > 0 ? meta : "");
-  },
-  error: (message, meta = {}) => {
-    console.error(`[ERROR] ${message}`, Object.keys(meta).length > 0 ? meta : "");
-  },
-  warn: (message, meta = {}) => {
-    console.warn(`[WARN] ${message}`, Object.keys(meta).length > 0 ? meta : "");
-  },
-  debug: (message, meta = {}) => {
-    console.log(`[DEBUG] ${message}`, Object.keys(meta).length > 0 ? meta : "");
-  },
 };
 
 /**
@@ -51,7 +127,6 @@ router.get("/db-connection", async (req, res) => {
       });
     }
 
-    // Test simple query
     const result = await pool.query("SELECT NOW() as current_time, version() as db_version");
 
     return res.json({
@@ -82,7 +157,6 @@ router.post("/simple-insert", async (req, res) => {
       });
     }
 
-    // Test data
     const testData = {
       first_name: "Test",
       last_name: "User",
@@ -92,7 +166,6 @@ router.post("/simple-insert", async (req, res) => {
       role: "student",
     };
 
-    // Insert test user
     const query = `
       INSERT INTO users (first_name, last_name, email, username, password_hash, role)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -171,14 +244,6 @@ router.get("/users", async (req, res) => {
 // Test email service - GET endpoint
 router.get("/email", async (req, res) => {
   try {
-    if (!emailService) {
-      return res.status(500).json({
-        success: false,
-        error: "Email service not available",
-        message: "Email service could not be loaded",
-      });
-    }
-
     const to = getStringParam(req.query.to);
 
     if (!to) {
@@ -191,13 +256,10 @@ router.get("/email", async (req, res) => {
 
     log.info("Testing email service", { to });
 
-    // Get email service status
-    const serviceStatus = emailService.getStatus();
+    const serviceStatus = safeEmailService.getStatus();
     log.info("Email service status:", serviceStatus);
 
-    // Send test email
-    const result = await emailService.sendTestEmail(to);
-
+    const result = await safeEmailService.sendTestEmail(to);
     log.info("Test email result:", result);
 
     return res.json({
@@ -207,7 +269,7 @@ router.get("/email", async (req, res) => {
       emailResult: result,
       instructions: result.success
         ? `Check the inbox for ${to} for the test email.`
-        : "Email sending failed. Check the error details above.",
+        : "Email sending failed or service unavailable. Check the error details above.",
     });
   } catch (error) {
     log.error("Test email endpoint error:", { error: error.message });
@@ -215,7 +277,7 @@ router.get("/email", async (req, res) => {
       success: false,
       error: "Internal server error during email test",
       details: error.message,
-      emailServiceStatus: emailService?.getStatus() || "Service unavailable",
+      emailServiceStatus: safeEmailService.getStatus(),
     });
   }
 });
@@ -223,13 +285,6 @@ router.get("/email", async (req, res) => {
 // Test email service - POST endpoint
 router.post("/email", async (req, res) => {
   try {
-    if (!emailService) {
-      return res.status(500).json({
-        success: false,
-        error: "Email service not available",
-      });
-    }
-
     const { to, subject, message } = req.body;
 
     if (!to) {
@@ -241,8 +296,7 @@ router.post("/email", async (req, res) => {
 
     log.info("Testing custom email", { to, subject });
 
-    // Send custom test email
-    const result = await emailService.sendEmail({
+    const result = await safeEmailService.sendEmail({
       to: to,
       subject: subject || "Custom Test Email - School Management System",
       text: message || "This is a custom test email from your School Management System.",
@@ -251,16 +305,18 @@ router.post("/email", async (req, res) => {
           <h2>Custom Test Email</h2>
           <p>${message || "This is a custom test email from your School Management System."}</p>
           <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-          <p style="color: #28a745;">Email service is working!</p>
+          <p style="color: #28a745;">Email service test!</p>
         </div>
       `,
     });
 
     return res.json({
       success: result.success,
-      message: result.success ? "Custom email sent successfully!" : "Custom email failed",
+      message: result.success
+        ? "Custom email sent successfully!"
+        : "Custom email failed or service unavailable",
       emailResult: result,
-      emailService: emailService.getStatus(),
+      emailService: safeEmailService.getStatus(),
     });
   } catch (error) {
     log.error("Custom test email error:", { error: error.message });
@@ -275,13 +331,6 @@ router.post("/email", async (req, res) => {
 // Test welcome email
 router.post("/email/welcome", async (req, res) => {
   try {
-    if (!emailService) {
-      return res.status(500).json({
-        success: false,
-        error: "Email service not available",
-      });
-    }
-
     const { to, name = "Test User", username = "testuser", role = "student" } = req.body;
 
     if (!to) {
@@ -293,8 +342,7 @@ router.post("/email/welcome", async (req, res) => {
 
     log.info("Testing welcome email", { to, name, role });
 
-    // Send welcome email
-    const result = await emailService.sendWelcomeEmail(
+    const result = await safeEmailService.sendWelcomeEmail(
       {
         name,
         username,
@@ -305,9 +353,11 @@ router.post("/email/welcome", async (req, res) => {
 
     return res.json({
       success: result.success,
-      message: result.success ? "Welcome email sent successfully!" : "Welcome email failed",
+      message: result.success
+        ? "Welcome email sent successfully!"
+        : "Welcome email failed or service unavailable",
       emailResult: result,
-      emailService: emailService.getStatus(),
+      emailService: safeEmailService.getStatus(),
     });
   } catch (error) {
     log.error("Welcome email test error:", { error: error.message });
@@ -322,19 +372,10 @@ router.post("/email/welcome", async (req, res) => {
 // Get email service status
 router.get("/email/status", (req, res) => {
   try {
-    if (!emailService) {
-      return res.json({
-        available: false,
-        error: "Email service not loaded",
-        configured: false,
-        mode: "unavailable",
-      });
-    }
-
-    const status = emailService.getStatus();
+    const status = safeEmailService.getStatus();
 
     return res.json({
-      available: true,
+      available: safeEmailService.isAvailable(),
       ...status,
       environment: {
         NODE_ENV: process.env.NODE_ENV,
@@ -345,6 +386,8 @@ router.get("/email/status", (req, res) => {
             : "Invalid"
           : "Missing",
       },
+      serviceError: emailServiceError,
+      rawEmailService: !!emailService,
     });
   } catch (error) {
     log.error("Email status check error:", { error: error.message });
@@ -408,13 +451,10 @@ router.get("/health", async (req, res) => {
 
     // Check email service
     try {
-      if (emailService) {
-        const emailStatus = emailService.getStatus();
-        health.services.email = emailStatus.configured ? "configured" : "not-configured";
-        health.services.emailMode = emailStatus.mode;
-      } else {
-        health.services.email = "not-available";
-      }
+      const emailStatus = safeEmailService.getStatus();
+      health.services.email = safeEmailService.isAvailable() ? "available" : "unavailable";
+      health.services.emailMode = emailStatus.mode;
+      health.services.emailError = emailServiceError;
     } catch (error) {
       health.services.email = "error";
       health.services.emailError = error.message;
@@ -431,4 +471,4 @@ router.get("/health", async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

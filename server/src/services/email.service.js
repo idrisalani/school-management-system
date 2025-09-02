@@ -1,5 +1,5 @@
-// server/src/services/email.service.js - Clean Version with No External Dependencies
-const SibApiV3Sdk = require("sib-api-v3-sdk");
+// server/src/services/email.service.js - ES6 Version
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 class EmailService {
   constructor() {
@@ -458,5 +458,5 @@ Service Status:
   }
 }
 
-// Export singleton instance
-module.exports = new EmailService();
+// ES6 default export to match your import statements
+export default new EmailService();
