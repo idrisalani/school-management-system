@@ -128,15 +128,15 @@ const AUDIT_ACTIONS = {
 };
 
 /**
- * Create comprehensive audit log entry
+ * Create audit log with proper TypeScript type handling
  * @param {Object} auditData - Audit log data
  * @param {string} auditData.action - Action performed
- * @param {number} [auditData.userId] - User ID who performed action
+ * @param {number|string|null} auditData.userId - User ID (can be number, string, or null)
  * @param {string} auditData.details - Detailed description
- * @param {string} [auditData.ipAddress] - Client IP address
- * @param {string} [auditData.userAgent] - Client user agent
+ * @param {string|null} [auditData.ipAddress] - Client IP address
+ * @param {string|null} [auditData.userAgent] - Client user agent
  * @param {Object} [auditData.metadata] - Additional metadata
- * @returns {Promise<void>}
+ * @returns {Promise<Object|null>}
  */
 const createAuditLog = async ({
   action,
@@ -147,26 +147,79 @@ const createAuditLog = async ({
   metadata = {},
 }) => {
   try {
-    await query(
-      `INSERT INTO audit_logs (
-        action, user_id, details, ip_address, user_agent, metadata, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [action, userId, details, ipAddress, userAgent, JSON.stringify(metadata)]
-    );
+    // TYPESCRIPT FIX: Proper type conversion and validation
+    let validatedUserId = null;
 
-    logger.debug("📝 Audit log created", {
-      action,
-      userId,
-      details,
-      ipAddress,
+    if (userId !== null && userId !== undefined) {
+      // Convert to integer regardless of input type
+      const numericUserId = typeof userId === "number" ? userId : parseInt(String(userId));
+
+      if (!isNaN(numericUserId) && numericUserId > 0) {
+        validatedUserId = numericUserId;
+      } else {
+        logger.warn("Invalid userId format in audit log:", {
+          userId,
+          type: typeof userId,
+          converted: numericUserId,
+        });
+        validatedUserId = null;
+      }
+    }
+
+    // TYPESCRIPT FIX: Ensure all parameters match expected types
+    const auditQuery = `
+      INSERT INTO audit_logs (
+        action, user_id, details, ip_address, user_agent, metadata, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      RETURNING id, created_at
+    `;
+
+    // TYPESCRIPT FIX: Explicit type conversion for all parameters
+    const auditValues = [
+      String(action), // Ensure string
+      validatedUserId, // Integer or null
+      String(details), // Ensure string
+      ipAddress ? String(ipAddress) : null, // String or null
+      userAgent ? String(userAgent) : null, // String or null
+      JSON.stringify(metadata || {}), // JSON string
+    ];
+
+    logger.debug("Creating audit log with validated values:", {
+      action: String(action),
+      userId: validatedUserId,
+      userIdType: typeof validatedUserId,
+      details: String(details).substring(0, 100) + "...",
+      ipAddress: ipAddress ? String(ipAddress) : null,
     });
+
+    const result = await query(auditQuery, auditValues);
+
+    if (result.rows && result.rows.length > 0) {
+      logger.debug("Audit log created successfully:", {
+        auditId: result.rows[0].id,
+        action: String(action),
+        userId: validatedUserId,
+        createdAt: result.rows[0].created_at,
+      });
+      return result.rows[0];
+    }
+
+    return null;
   } catch (error) {
-    // Don't let audit logging failures break the main flow
-    logger.error("❌ Failed to create audit log", {
-      action,
+    // Enhanced error logging with type information
+    logger.error("AUDIT LOG CREATION FAILED:", {
+      action: String(action),
       userId,
+      userIdOriginalType: typeof userId,
       error: error.message,
+      errorCode: error.code,
+      sqlState: error.sqlState,
+      details: details ? String(details).substring(0, 100) : null,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
+
+    // Don't throw - let the main operation continue
+    return null;
   }
 };
 
@@ -643,7 +696,8 @@ export const register = async (req, res, next) => {
 
     const {
       email,
-      password,
+      password, // <- Make sure this is extracted
+      confirmPassword, // <- Make sure this is extracted
       name,
       username,
       firstName,
@@ -653,6 +707,17 @@ export const register = async (req, res, next) => {
       dateOfBirth,
       address,
     } = req.body;
+
+    if (password && confirmPassword && password !== confirmPassword) {
+      res.status(400).json({
+        status: "error",
+        message: "Passwords do not match",
+        errors: {
+          confirmPassword: "Passwords do not match",
+        },
+      });
+      return; // <- This fixes the void return type issue
+    }
 
     // Keep your existing flexible name handling
     const fullName = name || username || `${firstName || ""} ${lastName || ""}`.trim();
@@ -808,19 +873,26 @@ export const register = async (req, res, next) => {
     });
 
     // Keep your existing comprehensive audit log
-    await createAuditLog({
-      action: AUDIT_ACTIONS.USER_CREATED,
-      userId: newUser.id,
-      details: `User registered with email verification required: ${email.toLowerCase()}, role: ${role}`,
-      ipAddress: req.ip,
-      userAgent: req.get("User-Agent"),
-      metadata: {
-        registrationSource: "web",
-        role: role,
-        hasPhone: !!phone,
-        hasAddress: !!address,
-        requiresEmailVerification: true,
-      },
+    setImmediate(async () => {
+      try {
+        await createAuditLog({
+          action: "USER_CREATED",
+          userId: newUser.id, // This will now be properly validated
+          details: `User registered: ${email.toLowerCase()}, role: ${role}`,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+          metadata: {
+            registrationSource: "web",
+            role: role,
+            hasPhone: !!phone,
+            hasAddress: !!address,
+          },
+        });
+        logger.debug("✅ Audit log created for registration");
+      } catch (auditError) {
+        logger.error("❌ Audit log failed (non-critical):", auditError.message);
+        // Don't fail registration if audit log fails
+      }
     });
 
     // UPDATED: Send verification email using your existing template system

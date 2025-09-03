@@ -337,7 +337,32 @@ const validateProfileCompletion = (req, res, next) => {
 };
 
 // Register public routes with proper middleware chain
-router.post("/register", rateLimiter(rateLimits.register), validateRegistration, registerHandler);
+router.post(
+  "/register",
+  rateLimiter(rateLimits.register),
+  validateRegistration,
+  asyncHandler(async (req, res, next) => {
+    logger.info("📝 Registration attempt", {
+      email: req.body.email,
+      role: req.body.role || "student",
+    });
+
+    try {
+      if (typeof authController.register === "function") {
+        await authController.register(req, res, next);
+      } else {
+        logger.error("Register controller method not found");
+        res.status(501).json({
+          status: "error",
+          message: "Registration endpoint not implemented",
+        });
+      }
+    } catch (error) {
+      logger.error("Registration route error:", error);
+      next(error);
+    }
+  })
+);
 router.post("/login", rateLimiter(rateLimits.login), validateLogin, loginHandler);
 router.post(
   "/refresh-token",
