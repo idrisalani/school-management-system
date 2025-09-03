@@ -1,4 +1,4 @@
-// server/src/services/email.service.js - Gmail Replacement Version
+// server/src/services/email.service.js - Gmail Replacement Version with Email Verification
 import nodemailer from "nodemailer";
 
 class EmailService {
@@ -537,6 +537,171 @@ Important Security Information:
 - Only use this link if you initiated the password reset
 
 If you're having trouble, contact us at ${process.env.SUPPORT_EMAIL || "support@schoolms.com"}
+
+Best regards,
+The School Management Team
+    `;
+
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: subject,
+      html: html,
+      text: text,
+    });
+  }
+
+  /**
+   * Send email verification email - ADDED METHOD FOR AUTH CONTROLLER COMPATIBILITY
+   */
+  async sendEmailVerification(userData, recipientEmail, verificationToken) {
+    const { name, firstName } = userData;
+    const verificationLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${verificationToken}`;
+
+    const subject = "📧 Verify Your Email - School Management System";
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Email Verification Required</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 0;
+            background-color: #f8fafc;
+          }
+          .container {
+            background-color: white;
+            margin: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .content { 
+            padding: 40px 30px;
+          }
+          .button-container {
+            text-align: center;
+            margin: 40px 0;
+          }
+          .button { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white; 
+            padding: 16px 32px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            display: inline-block;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+          }
+          .verification-info {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+          }
+          .verification-info h4 {
+            color: #1e40af;
+            margin: 0 0 10px 0;
+            font-size: 16px;
+          }
+          .verification-info ul {
+            color: #1e3a8a;
+            margin: 0;
+            padding-left: 20px;
+          }
+          .link-backup {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #374151;
+          }
+          .footer {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+            margin-top: 40px;
+            color: #9ca3af;
+            font-size: 14px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>📧 Verify Your Email Address</h1>
+          </div>
+          <div class="content">
+            <p>Hello <strong>${firstName || name}</strong>,</p>
+            
+            <p>Thank you for registering with our School Management System! To activate your account and access all features, please verify your email address by clicking the button below:</p>
+            
+            <div class="button-container">
+              <a href="${verificationLink}" class="button">
+                Verify My Email Address
+              </a>
+            </div>
+            
+            <div class="verification-info">
+              <h4>📋 Verification Details:</h4>
+              <ul>
+                <li>This verification link expires in <strong>24 hours</strong></li>
+                <li>You must verify your email before you can log in</li>
+                <li>Once verified, you'll have full access to your account</li>
+                <li>If you didn't create this account, please ignore this email</li>
+              </ul>
+            </div>
+            
+            <p><strong>Can't click the button?</strong> Copy and paste this link into your browser:</p>
+            <div class="link-backup">${verificationLink}</div>
+
+            <div class="footer">
+              <p>Need help? Contact us at <strong>${process.env.SUPPORT_EMAIL || "support@schoolms.com"}</strong></p>
+              <p>Best regards,<br>The School Management Team</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Email Verification Required - School Management System
+
+Hello ${firstName || name},
+
+Thank you for registering with our School Management System!
+
+To verify your email address, visit: ${verificationLink}
+
+Verification Details:
+- This link expires in 24 hours
+- You must verify your email before you can log in  
+- Once verified, you'll have full access to your account
+- If you didn't create this account, please ignore this email
+
+Need help? Contact us at ${process.env.SUPPORT_EMAIL || "support@schoolms.com"}
 
 Best regards,
 The School Management Team

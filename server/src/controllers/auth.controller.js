@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { query } from "../config/database.js";
 import logger from "../utils/logger.js";
 import sgMail from "@sendgrid/mail";
+import emailService from "../services/email.service.js";
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -224,174 +225,6 @@ const createAuditLog = async ({
 };
 
 // ========================= EMAIL SERVICE INTEGRATION =========================
-
-/**
- * Enhanced Email Service with template support
- */
-class EmailService {
-  constructor() {
-    this.templates = {
-      welcomeEmail: {
-        subject: "🎓 Welcome to School Management System!",
-        getHtml: (data) => `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">Welcome ${data.name}!</h2>
-            <p>Your account has been successfully created in our School Management System.</p>
-            <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <strong>Account Details:</strong><br>
-              Username: <code>${data.username}</code><br>
-              Email: <code>${data.email}</code><br>
-              Role: <code>${data.role}</code>
-            </div>
-            <p>To get started, please verify your email address:</p>
-            <a href="${data.verificationLink}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Verify Email Address
-            </a>
-            <p style="margin-top: 20px;">
-              <a href="${data.loginLink}">Login to your account</a>
-            </p>
-            <hr style="margin: 30px 0;">
-            <p style="color: #6b7280; font-size: 14px;">
-              Need help? Contact us at <a href="mailto:${data.supportEmail}">${data.supportEmail}</a>
-            </p>
-          </div>
-        `,
-      },
-      passwordReset: {
-        subject: "🔑 Password Reset Request",
-        getHtml: (data) => `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #dc2626;">Password Reset Request</h2>
-            <p>Hi ${data.name},</p>
-            <p>You requested a password reset for your School Management System account.</p>
-            <p>Click the button below to reset your password (valid for ${data.expirationTime}):</p>
-            <a href="${data.resetLink}" style="background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Reset Password
-            </a>
-            <p style="margin-top: 20px; color: #ef4444;">
-              <strong>Security Notice:</strong> ${data.securityNotice}
-            </p>
-            <hr style="margin: 30px 0;">
-            <p style="color: #6b7280; font-size: 14px;">
-              Need help? Contact us at <a href="mailto:${data.supportEmail}">${data.supportEmail}</a>
-            </p>
-          </div>
-        `,
-      },
-      emailVerification: {
-        subject: "📧 Verify Your Email Address",
-        getHtml: (data) => `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">Email Verification Required</h2>
-            <p>Hi ${data.firstName || data.name},</p>
-            <p>Thank you for registering with our School Management System. Please verify your email address to activate your account:</p>
-            <div style="margin: 30px 0; text-align: center;">
-              <a href="${data.verificationLink}" style="background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                Verify Email Address
-              </a>
-            </div>
-            <p>If the button doesn't work, copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 4px;">
-              <a href="${data.verificationLink}">${data.verificationLink}</a>
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-              This verification link will expire in ${data.expirationTime || "24 hours"}.
-            </p>
-            <hr style="margin: 30px 0;">
-            <p style="color: #6b7280; font-size: 14px;">
-              If you didn't create this account, please ignore this email.<br>
-              Need help? Contact us at <a href="mailto:${data.supportEmail}">${data.supportEmail}</a>
-            </p>
-          </div>
-        `,
-      },
-      emailVerificationSuccess: {
-        subject: "✅ Email Verified Successfully!",
-        getHtml: (data) => `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #059669;">Email Verified! 🎉</h2>
-            <p>Hi ${data.name},</p>
-            <p>Your email address has been successfully verified. You can now access all features of the School Management System.</p>
-            <div style="margin: 20px 0;">
-              <a href="${data.loginLink}" style="background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-right: 10px;">
-                Login Now
-              </a>
-              <a href="${data.dashboardLink}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Go to Dashboard
-              </a>
-            </div>
-          </div>
-        `,
-      },
-      passwordResetConfirmation: {
-        subject: "✅ Password Reset Successful",
-        getHtml: (data) => `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #059669;">Password Reset Successful</h2>
-            <p>Your password has been successfully reset.</p>
-            <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <strong>Reset Details:</strong><br>
-              Time: ${data.timestamp}<br>
-              IP Address: ${data.ipAddress}<br>
-              Browser: ${data.userAgent}
-            </div>
-            <p>If you didn't make this change, please contact support immediately.</p>
-            <p style="color: #6b7280; font-size: 14px;">
-              Contact us at <a href="mailto:${data.supportEmail}">${data.supportEmail}</a>
-            </p>
-          </div>
-        `,
-      },
-    };
-  }
-
-  /**
-   * Send email using template
-   * @param {string} templateName - Template name
-   * @param {Object} data - Template data
-   * @param {string} to - Recipient email
-   * @returns {Promise<{success: boolean, messageId: string}>}
-   */
-  async sendTemplate(templateName, data, to) {
-    try {
-      const template = this.templates[templateName];
-      if (!template) {
-        throw new Error(`Email template '${templateName}' not found`);
-      }
-
-      const html = template.getHtml(data);
-      const subject = template.subject;
-
-      // In production, integrate with your email service (SendGrid, SES, etc.)
-      // For now, we'll log the email content
-      logger.info("📧 Email sent", {
-        to,
-        subject,
-        template: templateName,
-        // In development, you might want to log the full HTML
-        preview:
-          process.env.NODE_ENV === "development" ? html : "Email content hidden in production",
-      });
-
-      // TODO: Replace with actual email service integration
-      // Example with SendGrid:
-      // await sgMail.send({ to, subject, html, from: process.env.FROM_EMAIL });
-
-      return { success: true, messageId: `mock-${Date.now()}` };
-    } catch (error) {
-      logger.error("❌ Failed to send email", {
-        templateName,
-        to,
-        error: error.message,
-      });
-      throw error;
-    }
-  }
-}
-
-const emailService = new EmailService();
-
-// ========================= TOKEN MANAGEMENT =========================
 
 /**
  * Enhanced token blacklisting system
@@ -696,8 +529,8 @@ export const register = async (req, res, next) => {
 
     const {
       email,
-      password, // <- Make sure this is extracted
-      confirmPassword, // <- Make sure this is extracted
+      password,
+      confirmPassword,
       name,
       username,
       firstName,
@@ -716,13 +549,13 @@ export const register = async (req, res, next) => {
           confirmPassword: "Passwords do not match",
         },
       });
-      return; // <- This fixes the void return type issue
+      return;
     }
 
-    // Keep your existing flexible name handling
+    // Flexible name handling
     const fullName = name || username || `${firstName || ""} ${lastName || ""}`.trim();
 
-    // Keep all your existing comprehensive validation
+    // Comprehensive validation
     if (!email || !password || !fullName) {
       throw new ValidationError("Email, password, and name are required");
     }
@@ -745,13 +578,13 @@ export const register = async (req, res, next) => {
       throw new ValidationError("Please provide a valid phone number");
     }
 
-    // Keep your existing role validation
+    // Role validation
     const validRoles = ["student", "teacher", "admin", "parent"];
     if (!validRoles.includes(role)) {
       throw new ValidationError(`Role must be one of: ${validRoles.join(", ")}`);
     }
 
-    // Keep your existing name parsing
+    // Name parsing
     const {
       firstName: parsedFirstName,
       lastName: parsedLastName,
@@ -777,7 +610,7 @@ export const register = async (req, res, next) => {
         throw new ConflictError("Email address is already registered and verified");
       } else {
         // User exists but not verified - resend verification
-        const verificationToken = generateVerificationToken(user.id);
+        const resendToken = generateVerificationToken(user.id);
 
         // Update existing user with new token
         await query(
@@ -786,20 +619,19 @@ export const register = async (req, res, next) => {
            token_expiry = NOW() + INTERVAL '24 hours',
            updated_at = NOW()
            WHERE id = $2`,
-          [verificationToken, user.id]
+          [resendToken, user.id]
         );
 
-        // Resend verification email using your existing email system
+        // Resend verification email using emailService method
         setImmediate(async () => {
           try {
-            await emailService.sendTemplate(
-              "emailVerification",
+            await emailService.sendEmailVerification(
               {
                 name: parsedFirstName || fullName,
-                verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${verificationToken}`,
-                supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
+                firstName: parsedFirstName,
               },
-              email.toLowerCase()
+              email.toLowerCase(),
+              resendToken
             );
             logger.info("📧 Verification email resent", { email: email.toLowerCase() });
           } catch (emailError) {
@@ -815,24 +647,22 @@ export const register = async (req, res, next) => {
           message: "Account exists but not verified. Verification email has been resent.",
           timestamp: new Date().toISOString(),
         });
+        return;
       }
     }
 
-    // Keep your existing password hashing
+    // Password hashing
     logger.debug("🔐 Hashing password...");
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Generate verification token using your existing function
-    const verificationToken = generateVerificationToken(1); // Temporary user ID for token generation
-
-    // UPDATED: Insert new user with verification fields added to your existing query
+    // Insert new user
     const result = await query(
       `INSERT INTO users (
         username, first_name, last_name, email, password, role, 
         phone, address, date_of_birth, is_verified, profile_completed, status, 
-        verification_token, token_expiry, login_attempts, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW() + INTERVAL '24 hours', $14, NOW(), NOW()) 
+        login_attempts, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()) 
       RETURNING id, username, first_name, last_name, email, role, created_at`,
       [
         generatedUsername,
@@ -847,7 +677,6 @@ export const register = async (req, res, next) => {
         false, // is_verified = false initially
         false, // profile_completed = false initially
         "active",
-        generateVerificationToken(1), // Will update after getting real user ID
         0, // login_attempts
       ]
     );
@@ -855,7 +684,7 @@ export const register = async (req, res, next) => {
     const newUser = result.rows[0];
 
     // Generate proper verification token with real user ID
-    const properVerificationToken = generateVerificationToken(newUser.id);
+    const verificationToken = generateVerificationToken(newUser.id);
 
     // Update user with proper verification token
     await query(
@@ -863,7 +692,7 @@ export const register = async (req, res, next) => {
        verification_token = $1,
        token_expiry = NOW() + INTERVAL '24 hours'
        WHERE id = $2`,
-      [properVerificationToken, newUser.id]
+      [verificationToken, newUser.id]
     );
 
     logger.info("✅ User created successfully with email verification", {
@@ -872,43 +701,16 @@ export const register = async (req, res, next) => {
       email: email.toLowerCase(),
     });
 
-    // Keep your existing comprehensive audit log
+    // Send verification email (non-blocking)
     setImmediate(async () => {
       try {
-        await createAuditLog({
-          action: "USER_CREATED",
-          userId: newUser.id, // This will now be properly validated
-          details: `User registered: ${email.toLowerCase()}, role: ${role}`,
-          ipAddress: req.ip,
-          userAgent: req.get("User-Agent"),
-          metadata: {
-            registrationSource: "web",
-            role: role,
-            hasPhone: !!phone,
-            hasAddress: !!address,
-          },
-        });
-        logger.debug("✅ Audit log created for registration");
-      } catch (auditError) {
-        logger.error("❌ Audit log failed (non-critical):", auditError.message);
-        // Don't fail registration if audit log fails
-      }
-    });
-
-    // UPDATED: Send verification email using your existing template system
-    setImmediate(async () => {
-      try {
-        // Add emailVerification template to your existing EmailService templates
-        await emailService.sendTemplate(
-          "emailVerification", // New template to add to your existing templates
+        await emailService.sendEmailVerification(
           {
             name: fullName,
             firstName: parsedFirstName || fullName,
-            verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${properVerificationToken}`,
-            supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
-            expirationTime: "24 hours",
           },
-          email.toLowerCase()
+          email.toLowerCase(),
+          verificationToken
         );
         logger.info("📧 Email verification email sent successfully", {
           userId: newUser.id,
@@ -923,7 +725,29 @@ export const register = async (req, res, next) => {
       }
     });
 
-    // Keep your existing success response with updated message
+    // Create comprehensive audit log
+    setImmediate(async () => {
+      try {
+        await createAuditLog({
+          action: "USER_CREATED",
+          userId: newUser.id,
+          details: `User registered: ${email.toLowerCase()}, role: ${role}`,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+          metadata: {
+            registrationSource: "web",
+            role: role,
+            hasPhone: !!phone,
+            hasAddress: !!address,
+          },
+        });
+        logger.debug("✅ Audit log created for registration");
+      } catch (auditError) {
+        logger.error("❌ Audit log failed (non-critical):", auditError.message);
+      }
+    });
+
+    // Success response
     res.status(201).json({
       status: "success",
       message:
@@ -1004,12 +828,12 @@ export const completeProfile = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
 
-    // FIXED: JavaScript-compatible type checking instead of TypeScript 'as'
+    // JavaScript-compatible type checking instead of TypeScript 'as'
     if (typeof decoded !== "object" || decoded === null) {
       throw new AuthenticationError("Invalid token format");
     }
 
-    // FIXED: Use bracket notation instead of type assertion
+    // Use bracket notation instead of type assertion
     if (!decoded["purpose"] || decoded["purpose"] !== "profile_completion") {
       throw new AuthenticationError("Invalid token purpose");
     }
@@ -1018,7 +842,7 @@ export const completeProfile = async (req, res, next) => {
       throw new AuthenticationError("Invalid token - missing user ID");
     }
 
-    // FIXED: Extract values with proper checking
+    // Extract values with proper checking
     const userId = decoded["userId"];
     const profileData = req.body;
 
@@ -1081,7 +905,7 @@ export const completeProfile = async (req, res, next) => {
 
     const updatedUser = updateResult.rows[0];
 
-    // Create audit log using your existing system
+    // Create audit log
     await createAuditLog({
       action: AUDIT_ACTIONS.PROFILE_UPDATED,
       userId: userId,
@@ -1095,7 +919,7 @@ export const completeProfile = async (req, res, next) => {
       },
     });
 
-    // Generate full access token using your existing function
+    // Generate full access token
     const accessToken = generateAccessToken({
       id: updatedUser.id,
       username: updatedUser.username,
@@ -1603,16 +1427,11 @@ export const requestPasswordReset = async (req, res, next) => {
       [resetToken, user.id]
     );
 
-    // Send enhanced password reset email
-    await emailService.sendTemplate(
-      "passwordReset",
+    // Send enhanced password reset email using existing emailService method
+    await emailService.sendPasswordResetEmail(
       {
-        name: `${user.first_name} ${user.last_name}`.trim() || "User",
         resetLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`,
-        expirationTime: "1 hour",
-        supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
-        securityNotice:
-          "If you didn't request this reset, please ignore this email and consider changing your password",
+        name: `${user.first_name} ${user.last_name}`.trim() || "User",
       },
       user.email
     );
@@ -1713,19 +1532,54 @@ export const resetPassword = async (req, res, next) => {
       userAgent: req.get("User-Agent"),
     });
 
-    // Send confirmation email
+    // Send confirmation email using sendEmail
     setImmediate(async () => {
       try {
-        await emailService.sendTemplate(
-          "passwordResetConfirmation",
-          {
-            timestamp: new Date().toLocaleString(),
-            ipAddress: req.ip,
-            userAgent: req.get("User-Agent"),
-            supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
-          },
-          user.email
-        );
+        await emailService.sendEmail({
+          to: user.email,
+          subject: "✅ Password Reset Successful",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
+              <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                <h2 style="color: #059669; margin: 0 0 30px 0; text-align: center;">✅ Password Reset Successful</h2>
+                
+                <p>Your password has been successfully reset.</p>
+                
+                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <strong>Reset Details:</strong><br>
+                  Time: ${new Date().toLocaleString()}<br>
+                  IP Address: ${req.ip}<br>
+                  Browser: ${req.get("User-Agent")}
+                </div>
+                
+                <p>If you didn't make this change, please contact support immediately.</p>
+                
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 14px;">
+                  Contact us at <strong>${process.env.SUPPORT_EMAIL || "support@schoolms.com"}</strong><br>
+                  Best regards,<br>The School Management Team
+                </p>
+              </div>
+            </div>
+          `,
+          text: `
+Password Reset Successful - School Management System
+
+Your password has been successfully reset.
+
+Reset Details:
+- Time: ${new Date().toLocaleString()}
+- IP Address: ${req.ip}
+- Browser: ${req.get("User-Agent")}
+
+If you didn't make this change, please contact support immediately.
+
+Contact us at ${process.env.SUPPORT_EMAIL || "support@schoolms.com"}
+
+Best regards,
+The School Management Team
+          `,
+        });
       } catch (emailError) {
         logger.error("Failed to send password reset confirmation email", {
           userId: user.id,
@@ -1806,18 +1660,55 @@ export const verifyEmail = async (req, res, next) => {
       userAgent: req.get("User-Agent"),
     });
 
-    // Send welcome confirmation email
+    // Send welcome confirmation email using sendEmail
     setImmediate(async () => {
       try {
-        await emailService.sendTemplate(
-          "emailVerificationSuccess",
-          {
-            name: `${user.first_name} ${user.last_name}`.trim() || "User",
-            loginLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/login`,
-            dashboardLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard`,
-          },
-          user.email
-        );
+        const userName = `${user.first_name} ${user.last_name}`.trim() || "User";
+        const loginLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/login`;
+        const dashboardLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard`;
+
+        await emailService.sendEmail({
+          to: user.email,
+          subject: "✅ Email Verified Successfully!",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
+              <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                <h2 style="color: #059669; margin: 0 0 30px 0; text-align: center;">Email Verified! 🎉</h2>
+                
+                <p>Hi <strong>${userName}</strong>,</p>
+                
+                <p>Your email address has been successfully verified. You can now access all features of the School Management System.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${loginLink}" style="background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-right: 10px;">
+                    Login Now
+                  </a>
+                  <a href="${dashboardLink}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                    Go to Dashboard
+                  </a>
+                </div>
+                
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 14px;">
+                  Best regards,<br>The School Management Team
+                </p>
+              </div>
+            </div>
+          `,
+          text: `
+Email Verified Successfully!
+
+Hi ${userName},
+
+Your email address has been successfully verified. You can now access all features of the School Management System.
+
+Login: ${loginLink}
+Dashboard: ${dashboardLink}
+
+Best regards,
+The School Management Team
+          `,
+        });
       } catch (emailError) {
         logger.error("Failed to send verification success email", {
           userId: user.id,
@@ -1839,8 +1730,8 @@ export const verifyEmail = async (req, res, next) => {
       message: "Email verified successfully! Please complete your profile to continue.",
       data: {
         user: formatUserResponse(user),
-        tempToken, // Add this
-        nextStep: user.profile_completed ? "login" : "complete-profile", // Add this
+        tempToken,
+        nextStep: user.profile_completed ? "login" : "complete-profile",
       },
       timestamp: new Date().toISOString(),
     });
@@ -1902,17 +1793,16 @@ export const resendVerification = async (req, res, next) => {
     }
 
     // Generate new verification token
-    const verificationToken = generateVerificationToken(user.id);
+    const newVerificationToken = generateVerificationToken(user.id);
 
-    // Send verification email
-    await emailService.sendTemplate(
-      "emailVerification",
+    // Send verification email using emailService
+    await emailService.sendEmailVerification(
       {
         name: `${user.first_name} ${user.last_name}`.trim() || "User",
-        verificationLink: `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email?token=${verificationToken}`,
-        supportEmail: process.env.SUPPORT_EMAIL || "support@schoolms.com",
+        firstName: user.first_name,
       },
-      user.email
+      user.email,
+      newVerificationToken
     );
 
     await createAuditLog({
