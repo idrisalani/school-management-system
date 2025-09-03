@@ -125,7 +125,7 @@ class EmailService {
 
       sendSmtpEmail.sender = {
         name: "School Management System",
-        email: "noreply@schoolms.com",
+        email: "idris.bin.muslih@outlook.com", // Use your verified sender
       };
 
       sendSmtpEmail.to = [{ email: to }];
