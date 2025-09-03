@@ -398,4 +398,259 @@ router.get("/health", async (req, res) => {
   }
 });
 
+// Add this to your server/src/routes/test-email.js file
+// Add this new endpoint to test email verification template
+
+/**
+ * Test email verification template specifically
+ * POST /api/v1/test-email/verification
+ */
+router.post("/verification", async (req, res) => {
+  try {
+    const { to, name = "Test User", firstName = "Test" } = req.body;
+
+    if (!to) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email "to" is required in request body',
+        example: { to: "test@example.com", name: "John Doe", firstName: "John" },
+      });
+    }
+
+    logger.info("Testing email verification template for:", { to, name, firstName });
+
+    // Create test verification token and link
+    const verificationToken = `verify-test-${Date.now()}`;
+    const verificationLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${verificationToken}`;
+
+    // Create verification email HTML template
+    const subject = "📧 Verify Your Email - School Management System";
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Email Verification Required</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 0;
+            background-color: #f8fafc;
+          }
+          .container {
+            background-color: white;
+            margin: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .emoji-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            display: block;
+          }
+          .content { 
+            padding: 40px 30px;
+          }
+          .button-container {
+            text-align: center;
+            margin: 40px 0;
+          }
+          .button { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white; 
+            padding: 18px 36px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            display: inline-block;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+          }
+          .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+          }
+          .info-box {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-left: 4px solid #0ea5e9;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 30px 0;
+          }
+          .info-box h4 {
+            color: #0c4a6e;
+            margin: 0 0 15px 0;
+            font-size: 18px;
+          }
+          .info-box ul {
+            color: #075985;
+            margin: 0;
+            padding-left: 20px;
+          }
+          .info-box li {
+            margin: 8px 0;
+          }
+          .link-backup {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #374151;
+            border: 1px solid #d1d5db;
+          }
+          .footer {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+            margin-top: 40px;
+            color: #9ca3af;
+            font-size: 14px;
+          }
+          .test-notice {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 1px solid #f59e0b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+          }
+          .test-notice strong {
+            color: #92400e;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <span class="emoji-icon">📧</span>
+            <h1>Verify Your Email Address</h1>
+          </div>
+          <div class="content">
+            <div class="test-notice">
+              <strong>🧪 THIS IS A TEST EMAIL</strong><br>
+              This verification link will not actually verify any accounts.
+            </div>
+
+            <p>Hello <strong>${firstName || name}</strong>,</p>
+            
+            <p>Welcome to School Management System! To complete your registration and secure your account, please verify your email address by clicking the button below:</p>
+            
+            <div class="button-container">
+              <a href="${verificationLink}" class="button">Verify My Email Address</a>
+            </div>
+            
+            <div class="info-box">
+              <h4>Why verify your email address?</h4>
+              <ul>
+                <li><strong>Account Security:</strong> Protect your account with password recovery</li>
+                <li><strong>Important Updates:</strong> Receive notifications about grades and assignments</li>
+                <li><strong>Full Access:</strong> Unlock all School Management System features</li>
+                <li><strong>Communication:</strong> Connect with teachers, classmates, and parents</li>
+              </ul>
+            </div>
+            
+            <p><strong>Can't click the button?</strong> Copy and paste this link into your browser:</p>
+            <div class="link-backup">${verificationLink}</div>
+
+            <div class="footer">
+              <p><strong>⏰ This verification link expires in 24 hours.</strong></p>
+              <p>If you didn't create this account, please ignore this email and no action is required.</p>
+              <p>Need help? Contact our support team at <strong>${process.env.SUPPORT_EMAIL || "support@schoolms.com"}</strong></p>
+              <p>Best regards,<br>The School Management Team</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Email Verification - School Management System
+
+Hello ${firstName || name},
+
+Welcome to School Management System! Please verify your email address to complete your registration and secure your account.
+
+Verification Link: ${verificationLink}
+
+Why verify your email address?
+- Account Security: Protect your account with password recovery
+- Important Updates: Receive notifications about grades and assignments  
+- Full Access: Unlock all School Management System features
+- Communication: Connect with teachers, classmates, and parents
+
+This verification link expires in 24 hours.
+
+If you didn't create this account, please ignore this email.
+
+Need help? Contact us at ${process.env.SUPPORT_EMAIL || "support@schoolms.com"}
+
+Best regards,
+The School Management Team
+
+---
+THIS IS A TEST EMAIL - This verification link will not actually verify any accounts.
+    `;
+
+    // Send the verification email
+    const result = await emailService.sendEmail({
+      to: to,
+      subject: subject,
+      html: html,
+      text: text,
+    });
+
+    logger.info("Email verification test result:", result);
+
+    return res.json({
+      success: result.success,
+      message: result.success
+        ? "Email verification test sent via Gmail!"
+        : "Email verification test failed",
+      emailService: emailService.getStatus(),
+      emailResult: result,
+      testData: {
+        verificationLink: verificationLink,
+        name: name,
+        firstName: firstName,
+        tokenUsed: verificationToken,
+      },
+      instructions: result.success
+        ? `✅ Check ${to} for the email verification test message. The email includes a professional template with your school branding.`
+        : `❌ Email verification test failed: ${result.error}`,
+      timestamp: new Date().toISOString(),
+      note: "This is a test verification link - it will not actually verify any accounts.",
+    });
+  } catch (error) {
+    logger.error("Email verification test error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error during email verification test",
+      details: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 export default router;
