@@ -409,26 +409,16 @@ const Register = () => {
    * Handle form submission
    * @param {React.FormEvent} e - Form event
    */
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, retryCount = 0) => {
+    // <- ADD retryCount parameter here
     e.preventDefault();
 
     // Don't submit if email exists or is still being checked
-    if (emailStatus.isChecking) {
+    if (emailStatus.isChecking || emailStatus.exists === true) {
       return;
     }
 
     if (!validateForm()) return;
-
-    // Additional check to prevent submission if email exists
-    if (emailStatus.exists === true) {
-      setErrors((prev) => ({
-        ...prev,
-        email: emailStatus.verified
-          ? "Email is already registered and verified. Try logging in instead."
-          : "Email is already registered but not verified. Check your email for verification link.",
-      }));
-      return;
-    }
 
     setIsLoading(true);
     setErrors({});
@@ -436,7 +426,7 @@ const Register = () => {
     try {
       // Test connection first
       if (connectionStatus !== "connected") {
-        console.log("🔍 Testing connection before registration...");
+        console.log("Testing connection before registration...");
         const healthResponse = await fetch(
           `${process.env.REACT_APP_API_URL}/api/v1/health`
         );
@@ -445,22 +435,8 @@ const Register = () => {
         }
       }
 
-      // Debug the form data before sending
-      console.log("📝 Form data before processing:", {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        password: formData.password ? "***" : "MISSING",
-        confirmPassword: formData.confirmPassword ? "***" : "MISSING",
-        role: formData.role,
-        hasConfirmPassword: !!formData.confirmPassword,
-        passwordsMatch: formData.password === formData.confirmPassword,
-        emailStatus: emailStatus,
-      });
-
       // Create the registration data object
       const registrationData = {
-        // Use name instead of username to match your backend
         name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
@@ -470,7 +446,7 @@ const Register = () => {
         role: formData.role,
       };
 
-      console.log("🚀 Sending registration data:", {
+      console.log("Sending registration data:", {
         ...registrationData,
         password: "***",
         confirmPassword: registrationData.confirmPassword ? "***" : "MISSING",
@@ -489,7 +465,7 @@ const Register = () => {
         }
       );
 
-      console.log("📡 Response status:", response.status);
+      console.log("Response status:", response.status);
 
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
@@ -497,7 +473,7 @@ const Register = () => {
       }
 
       const data = await response.json();
-      console.log("📥 Response data:", data);
+      console.log("Response data:", data);
 
       if (!response.ok) {
         // Handle validation errors from backend
@@ -516,49 +492,145 @@ const Register = () => {
             Object.assign(validationErrors, data.errors);
           }
 
-          console.error("❌ Validation errors:", validationErrors);
+          console.error("Validation errors:", validationErrors);
           setErrors((prev) => ({ ...prev, ...validationErrors }));
-        } else if (response.status === 409) {
+          return;
+        }
+
+        if (response.status === 409) {
           // Email already exists
           setErrors((prev) => ({
             ...prev,
             email: data.message || "Email already exists",
           }));
-        } else {
-          console.error("❌ Registration failed:", data);
+          return;
+        }
+
+        // For 500 errors or network issues, offer retry
+        if (response.status >= 500 && retryCount < 2) {
+          console.log(`Retrying registration attempt ${retryCount + 1}/3`);
+          setTimeout(
+            () => {
+              handleSubmit(e, retryCount + 1); // <- Now retryCount is properly defined
+            },
+            2000 * (retryCount + 1)
+          ); // Exponential backoff
           setErrors((prev) => ({
             ...prev,
-            submit: data.message || "Registration failed",
+            submit: `Registration failed. Retrying in ${2 * (retryCount + 1)} seconds...`,
           }));
+          return;
         }
-        return;
+
+        throw new Error(data.message || "Registration failed");
       }
 
-      console.log("✅ Registration successful:", data);
+      // Success handling
+      console.log("Registration successful:", data);
 
-      // Store token if provided
       if (data.data?.token) {
         localStorage.setItem("token", data.data.token);
         localStorage.setItem("user", JSON.stringify(data.data.user));
       }
 
-      // Store email before resetting form
       setRegisteredEmail(formData.email);
-
-      // Success - clear saved form data and show success
       localStorage.removeItem("registrationForm");
       setFormData(initialFormData);
-      resetEmailStatus(); // Clear email validation state
+      resetEmailStatus();
       setShowSuccessModal(true);
     } catch (error) {
-      console.error("❌ Registration error:", error);
-      setErrors({
-        submit: error.message || "Registration failed - please try again",
-      });
+      console.error("Registration error:", error);
+
+      // Network error handling with retry option
+      if (!navigator.onLine) {
+        setErrors({
+          submit:
+            "No internet connection. Please check your connection and try again.",
+        });
+      } else if (error.name === "TypeError" && retryCount < 2) {
+        // Likely a network error, offer retry
+        setTimeout(
+          () => {
+            handleSubmit(e, retryCount + 1); // <- Now retryCount is properly defined
+          },
+          2000 * (retryCount + 1)
+        );
+        setErrors({
+          submit: `Connection failed. Retrying in ${2 * (retryCount + 1)} seconds...`,
+        });
+      } else {
+        setErrors({
+          submit:
+            retryCount >= 2
+              ? "Registration failed after multiple attempts. Please try again later."
+              : error.message || "Registration failed - please try again",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Also add this connection status checker
+  const checkServerConnection = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/v1/health`,
+        {
+          signal: controller.signal,
+          headers: { "Cache-Control": "no-cache" },
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.status === "success";
+      }
+      return false;
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("Health check timed out");
+      } else {
+        console.log("Health check failed:", error.message);
+      }
+      return false;
+    }
+  };
+
+  // Enhanced connection status effect
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkConnection = async () => {
+      if (!isMounted) return;
+
+      setConnectionStatus(null); // Reset status
+      const isConnected = await checkServerConnection();
+
+      if (isMounted) {
+        setConnectionStatus(isConnected ? "connected" : "failed");
+      }
+    };
+
+    checkConnection();
+
+    // Recheck connection every 30 seconds if failed
+    const interval = setInterval(async () => {
+      if (connectionStatus === "failed") {
+        await checkConnection();
+      }
+    }, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [connectionStatus]);
 
   /**
    * Handle keyboard navigation
