@@ -8,9 +8,12 @@ import ConnectionTest from "../components/tests/ConnectionTest.jsx";
 // Import feature components
 import Login from "../features/auth/Login.jsx";
 import Register from "../features/auth/Register.jsx";
-// ADD THESE PASSWORD RESET IMPORTS
+// PASSWORD RESET IMPORTS
 import ForgotPassword from "../features/auth/ForgotPassword.jsx";
 import ResetPassword from "../features/auth/ResetPassword.jsx";
+// EMAIL VERIFICATION IMPORTS - ADD THESE
+import EmailVerification from "../features/auth/EmailVerification.jsx";
+import ProfileCompletion from "../features/auth/ProfileCompletion.jsx";
 
 import AdminDashboard from "../features/admin/AdminDashboard.jsx";
 import TeacherDashboard from "../features/teacher/TeacherDashboard.jsx";
@@ -111,7 +114,20 @@ const AppRoutes = () => {
         }
       />
 
-      {/* PASSWORD RESET ROUTES - ADD THESE */}
+      {/* EMAIL VERIFICATION ROUTES - ADD THESE */}
+      <Route path="/verify-email/:token" element={<EmailVerification />} />
+      <Route
+        path="/complete-profile"
+        element={
+          isAuthenticated ? (
+            <Navigate to={getDashboardRoute()} replace />
+          ) : (
+            <ProfileCompletion />
+          )
+        }
+      />
+
+      {/* PASSWORD RESET ROUTES */}
       <Route
         path="/forgot-password"
         element={

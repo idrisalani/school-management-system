@@ -6,69 +6,51 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../services/api";
 
-/**
- * @typedef {Object} User
- * @property {string} id
- * @property {string} first_name
- * @property {string} last_name
- * @property {string} email
- * @property {string} role
- */
-
-/**
- * @typedef {Object} FormData
- * @property {string} phone
- * @property {string} address
- * @property {string} date_of_birth
- * @property {string} gender
- * @property {string} bio
- * @property {string} grade_level
- * @property {string} parent_email
- * @property {string} emergency_contact
- * @property {string} department
- * @property {string} qualifications
- */
-
 const ProfileCompletion = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  /** @type {[User | null, React.Dispatch<React.SetStateAction<User | null>>]} */
-  const [user, setUser] = useState(null);
+  // Use type assertions and proper initial values to fix TypeScript inference
+  const [user, setUser] = useState(/** @type {any} */ (null));
   const [loading, setLoading] = useState(false);
 
-  /** @type {[FormData, React.Dispatch<React.SetStateAction<FormData>>]} */
-  const [formData, setFormData] = useState({
-    phone: "",
-    address: "",
-    date_of_birth: "",
-    gender: "",
-    bio: "",
-    // Student fields
-    grade_level: "",
-    parent_email: "",
-    emergency_contact: "",
-    // Teacher fields
-    department: "",
-    qualifications: "",
-  });
+  const [formData, setFormData] = useState(
+    /** @type {any} */ ({
+      phone: "",
+      address: "",
+      dateOfBirth: "", // Fixed field name to match backend
+      gender: "",
+      bio: "",
+      // Student fields
+      gradeLevel: "", // Fixed field name to match backend
+      parentEmail: "", // Fixed field name to match backend
+      emergencyContact: "", // Fixed field name to match backend
+      // Teacher fields
+      department: "",
+      qualifications: "",
+    })
+  );
 
-  /** @type {[string[], React.Dispatch<React.SetStateAction<string[]>>]} */
-  const [errors, setErrors] = useState([]);
+  // Initialize errors as a proper string array
+  const [errors, setErrors] = useState(/** @type {string[]} */ ([]));
 
   useEffect(() => {
-    // Get user data from location state (passed from verification)
-    if (location.state?.user) {
-      setUser(location.state.user);
+    // Get user data and temp token from location state
+    if (location.state?.user && location.state?.tempToken) {
+      const userData = location.state.user;
+      setUser(userData);
+
+      // Set the temp token in API headers
+      api.defaults.headers.common["Authorization"] =
+        `Bearer ${location.state.tempToken}`;
     } else {
-      // Redirect to login if no user data
+      // Redirect to login if no user data or token
       navigate("/login");
     }
   }, [location, navigate]);
 
   /**
    * Handle input changes
-   * @param {React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>} e
    */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -80,7 +62,6 @@ const ProfileCompletion = () => {
 
   /**
    * Handle form submission
-   * @param {React.FormEvent<HTMLFormElement>} e
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -91,27 +72,68 @@ const ProfileCompletion = () => {
       const response = await api.post("/auth/complete-profile", formData);
 
       if (response.data.status === "success") {
-        // Store the new access token
-        localStorage.setItem("token", response.data.data.accessToken);
+        // Store the new access token and user data
+        localStorage.setItem("token", response.data.data.token);
         localStorage.setItem("user", JSON.stringify(response.data.data.user));
 
-        // Redirect to dashboard
+        // Update API headers with the real token
+        api.defaults.headers.common["Authorization"] =
+          `Bearer ${response.data.data.token}`;
+
+        // Show success message and redirect to dashboard
+        alert(
+          "Profile completed successfully! Welcome to the School Management System."
+        );
         navigate("/dashboard");
       }
     } catch (error) {
+      console.error("Profile completion error:", error);
+
       if (error.response?.data?.errors) {
-        setErrors(error.response.data.errors);
+        // Handle validation errors - convert object to array
+        const errorList = [];
+        if (
+          typeof error.response.data.errors === "object" &&
+          !Array.isArray(error.response.data.errors)
+        ) {
+          Object.entries(error.response.data.errors).forEach(
+            ([field, message]) => {
+              errorList.push(`${field}: ${message}`);
+            }
+          );
+        } else if (Array.isArray(error.response.data.errors)) {
+          errorList.push(...error.response.data.errors);
+        } else {
+          errorList.push(String(error.response.data.errors));
+        }
+        setErrors(errorList);
+      } else if (error.response?.data?.message) {
+        setErrors([error.response.data.message]);
       } else {
-        setErrors([
-          error.response?.data?.message || "Failed to complete profile",
-        ]);
+        setErrors(["Failed to complete profile. Please try again."]);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) return <div>Loading...</div>;
+  // Loading state
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Get user's display name safely with proper fallbacks
+  const displayName =
+    (user &&
+      (user.firstName || user.first_name || user.name || user.username)) ||
+    "User";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -121,16 +143,21 @@ const ProfileCompletion = () => {
             Complete Your Profile
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Welcome {user.first_name}! Please complete your profile to continue.
+            Welcome {displayName}! Please complete your profile to continue.
           </p>
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-md p-3">
+            <p className="text-sm text-green-800 text-center">
+              ✓ Email verified successfully! Complete your profile below.
+            </p>
+          </div>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {errors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-md p-4">
-              <ul className="text-sm text-red-600">
+              <ul className="text-sm text-red-600 space-y-1">
                 {errors.map((error, index) => (
-                  <li key={index}>{error}</li>
+                  <li key={index}>• {error}</li>
                 ))}
               </ul>
             </div>
@@ -141,7 +168,7 @@ const ProfileCompletion = () => {
             <input
               type="tel"
               name="phone"
-              placeholder="Phone Number"
+              placeholder="Phone Number *"
               value={formData.phone}
               onChange={handleInputChange}
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -150,7 +177,7 @@ const ProfileCompletion = () => {
 
             <textarea
               name="address"
-              placeholder="Address"
+              placeholder="Address *"
               value={formData.address}
               onChange={handleInputChange}
               rows={3}
@@ -160,8 +187,8 @@ const ProfileCompletion = () => {
 
             <input
               type="date"
-              name="date_of_birth"
-              value={formData.date_of_birth}
+              name="dateOfBirth"
+              value={formData.dateOfBirth}
               onChange={handleInputChange}
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               required
@@ -174,7 +201,7 @@ const ProfileCompletion = () => {
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               required
             >
-              <option value="">Select Gender</option>
+              <option value="">Select Gender *</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
@@ -192,20 +219,20 @@ const ProfileCompletion = () => {
           </div>
 
           {/* Student-specific fields */}
-          {user.role === "student" && (
+          {user && user.role === "student" && (
             <div className="space-y-4 border-t pt-4">
               <h3 className="text-lg font-medium text-gray-900">
                 Student Information
               </h3>
 
               <select
-                name="grade_level"
-                value={formData.grade_level}
+                name="gradeLevel"
+                value={formData.gradeLevel}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               >
-                <option value="">Select Grade Level</option>
+                <option value="">Select Grade Level *</option>
                 {[...Array(12)].map((_, i) => (
                   <option key={i + 1} value={i + 1}>
                     Grade {i + 1}
@@ -215,9 +242,9 @@ const ProfileCompletion = () => {
 
               <input
                 type="email"
-                name="parent_email"
-                placeholder="Parent/Guardian Email"
-                value={formData.parent_email}
+                name="parentEmail"
+                placeholder="Parent/Guardian Email *"
+                value={formData.parentEmail}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -225,9 +252,9 @@ const ProfileCompletion = () => {
 
               <input
                 type="tel"
-                name="emergency_contact"
-                placeholder="Emergency Contact Number"
-                value={formData.emergency_contact}
+                name="emergencyContact"
+                placeholder="Emergency Contact Number *"
+                value={formData.emergencyContact}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -236,7 +263,7 @@ const ProfileCompletion = () => {
           )}
 
           {/* Teacher-specific fields */}
-          {user.role === "teacher" && (
+          {user && user.role === "teacher" && (
             <div className="space-y-4 border-t pt-4">
               <h3 className="text-lg font-medium text-gray-900">
                 Teacher Information
@@ -249,7 +276,7 @@ const ProfileCompletion = () => {
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               >
-                <option value="">Select Department</option>
+                <option value="">Select Department *</option>
                 <option value="Mathematics">Mathematics</option>
                 <option value="Science">Science</option>
                 <option value="English">English</option>
@@ -262,7 +289,7 @@ const ProfileCompletion = () => {
 
               <textarea
                 name="qualifications"
-                placeholder="Qualifications and Certifications"
+                placeholder="Qualifications and Certifications *"
                 value={formData.qualifications}
                 onChange={handleInputChange}
                 rows={3}
@@ -275,9 +302,16 @@ const ProfileCompletion = () => {
           <button
             type="submit"
             disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Completing Profile..." : "Complete Profile"}
+            {loading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Completing Profile...
+              </div>
+            ) : (
+              "Complete Profile"
+            )}
           </button>
         </form>
       </div>
