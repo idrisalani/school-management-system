@@ -1719,22 +1719,48 @@ The School Management Team
 
     logger.info("📧 Email verified successfully", { userId: user.id });
 
-    const tempToken = jwt.sign(
-      { userId: user.id, purpose: "profile_completion" },
-      process.env.JWT_SECRET || "your-secret-key",
-      { expiresIn: "2h" }
-    );
+    // Check if profile is completed to determine next step
+    const profileCheck = await query("SELECT profile_completed FROM users WHERE id = $1", [
+      user.id,
+    ]);
 
-    res.json({
-      status: "success",
-      message: "Email verified successfully! Please complete your profile to continue.",
-      data: {
-        user: formatUserResponse(user),
-        tempToken,
-        nextStep: user.profile_completed ? "login" : "complete-profile",
-      },
-      timestamp: new Date().toISOString(),
+    const isProfileCompleted = profileCheck.rows[0]?.profile_completed || false;
+
+    logger.info("Profile completion status check", {
+      userId: user.id,
+      isProfileCompleted,
     });
+
+    if (isProfileCompleted) {
+      // Profile already completed - redirect to login
+      res.json({
+        status: "success",
+        message: "Email verified successfully! You can now log in.",
+        data: {
+          user: formatUserResponse(user),
+          nextStep: "login",
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      // Profile not completed - generate temp token and redirect to profile completion
+      const tempToken = jwt.sign(
+        { userId: user.id, purpose: "profile_completion" },
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "2h" }
+      );
+
+      res.json({
+        status: "success",
+        message: "Email verified successfully! Please complete your profile to continue.",
+        data: {
+          user: formatUserResponse(user),
+          tempToken,
+          nextStep: "complete-profile",
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
   } catch (error) {
     logger.error("💥 Email verification error", { error: error.message });
     next(error);
