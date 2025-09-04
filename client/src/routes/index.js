@@ -117,16 +117,7 @@ const AppRoutes = () => {
       {/* EMAIL VERIFICATION ROUTES - ADD THESE */}
       <Route path="/verify-email/:token" element={<EmailVerification />} />
 
-      <Route
-        path="/complete-profile"
-        element={
-          isAuthenticated && user?.profileCompleted === true ? (
-            <Navigate to={getDashboardRoute()} replace />
-          ) : (
-            <ProfileCompletion />
-          )
-        }
-      />
+      <Route path="/complete-profile" element={<ProfileCompletion />} />
 
       {/* PASSWORD RESET ROUTES */}
       <Route

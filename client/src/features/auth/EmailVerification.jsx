@@ -76,19 +76,40 @@ const EmailVerification = () => {
     verifyEmail();
   }, [token]);
 
+  // UPDATE your EmailVerification.jsx handleContinue function with debugging:
+
   const handleContinue = () => {
-    const { nextStep, user } = verificationState;
+    const { nextStep, user, tempToken } = verificationState;
+
+    // ADD DEBUG LOGGING
+    console.log("🔍 EmailVerification Debug:", {
+      nextStep,
+      hasUser: !!user,
+      hasTempToken: !!tempToken,
+      userProfileCompleted: user?.profile_completed,
+      verificationState: verificationState,
+    });
 
     if (nextStep === "complete_profile") {
+      // Store temp token in localStorage
+      if (tempToken) {
+        localStorage.setItem("tempToken", tempToken);
+        console.log("✅ Temp token stored in localStorage");
+      } else {
+        console.warn("⚠️ No temp token provided for profile completion");
+      }
+
       // Navigate to profile completion with user data
       navigate("/complete-profile", {
         state: { user },
         replace: true,
       });
+      console.log("🚀 Navigating to profile completion");
     } else if (nextStep === "login") {
+      console.log("🔄 Redirecting to login");
       navigate("/login", { replace: true });
     } else {
-      // Default behavior
+      console.log("🏠 Defaulting to dashboard");
       navigate("/dashboard", { replace: true });
     }
   };
