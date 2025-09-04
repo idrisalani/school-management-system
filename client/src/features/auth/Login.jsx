@@ -311,21 +311,6 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      {/* Connection Status Indicator */}
-      {connectionStatus && (
-        <div
-          className={`fixed top-4 right-4 z-50 p-3 rounded-lg text-sm max-w-sm ${
-            connectionStatus === "connected"
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-700 border border-red-200"
-          }`}
-        >
-          {connectionStatus === "connected"
-            ? "✅ Connected to server"
-            : "❌ Server connection failed - please refresh and try again"}
-        </div>
-      )}
-
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 relative">
           {/* Back Button */}
