@@ -90,7 +90,7 @@ const EmailVerification = () => {
       verificationState: verificationState,
     });
 
-    if (nextStep === "complete_profile") {
+    if (nextStep === "complete_profile" || nextStep === "complete-profile") {
       // Store temp token in localStorage
       if (tempToken) {
         localStorage.setItem("tempToken", tempToken);

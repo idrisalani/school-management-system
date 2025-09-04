@@ -1756,7 +1756,7 @@ The School Management Team
         data: {
           user: formatUserResponse(user),
           tempToken,
-          nextStep: "complete_profile",
+          nextStep: "complete-profile",
         },
         timestamp: new Date().toISOString(),
       });
