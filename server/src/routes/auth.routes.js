@@ -447,12 +447,13 @@ router.post(
 );
 
 // Profile Completion
+// Add this route
 router.post(
   "/complete-profile",
   rateLimiter(rateLimits.register),
   validateProfileCompletion,
   asyncHandler(async (req, res, next) => {
-    logger.info("Profile completion attempt");
+    console.log("Profile completion attempt");
 
     if (typeof authController.completeProfile === "function") {
       await authController.completeProfile(req, res, next);
@@ -461,11 +462,7 @@ router.post(
         status: "success",
         message: "Profile completed successfully!",
         data: {
-          user: {
-            id: 1,
-            email: "test@example.com",
-            profileCompleted: true,
-          },
+          user: { id: 1, email: "test@example.com", profileCompleted: true },
           token: "mock-access-token",
         },
       });
