@@ -1,6 +1,6 @@
 // client/src/services/dashboardApi.js - Backend API calls (no direct Supabase)
 const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+  (process.env.REACT_APP_API_URL || "http://localhost:5000") + "/api/v1";
 
 // Helper function to make authenticated API calls
 const apiCall = async (endpoint, options = {}) => {
