@@ -143,8 +143,13 @@ const testEndpoint = (req, res) => {
       "GET /api/v1/auth/me",
       "POST /api/v1/auth/logout",
       "GET /api/v1/auth/verify",
-      "GET /api/v1/auth/verify-auth", // 🔧 CRITICAL FIX: This was missing!
+      "GET /api/v1/auth/verify-auth",
       "POST /api/v1/auth/refresh-token",
+      "POST /api/v1/auth/complete-profile", // ← ADD THIS LINE!
+      "POST /api/v1/auth/request-password-reset",
+      "POST /api/v1/auth/reset-password",
+      "GET /api/v1/auth/verify-email/:token",
+      "POST /api/v1/auth/resend-verification",
     ],
   });
 };
