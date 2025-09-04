@@ -517,40 +517,38 @@ router.post(
 
       // 2. DECODE JWT TO GET USER ID (FIXED VERSION)
       let userId;
+      let tokenDecoded = false;
+
       try {
-        if (process.env.JWT_ACCESS_SECRET) {
-          // Verify and decode JWT
-          const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-
-          // Type guard: Check if decoded is an object (JwtPayload) and not a string
-          if (typeof decoded === "object" && decoded !== null) {
-            // Now TypeScript knows decoded is JwtPayload
-            userId = decoded.id || decoded.userId || decoded.sub;
-          } else {
-            // decoded is a string - this shouldn't happen with proper JWT tokens
-            throw new Error("Invalid token format - unexpected string result");
+        // Try verification secret first (for email verification tokens)
+        if (process.env.JWT_VERIFICATION_SECRET && !tokenDecoded) {
+          try {
+            const decoded = jwt.verify(token, process.env.JWT_VERIFICATION_SECRET);
+            if (typeof decoded === "object" && decoded !== null) {
+              userId = decoded.id || decoded.userId || decoded.sub;
+              tokenDecoded = true;
+              console.log("Token verified with VERIFICATION_SECRET");
+            }
+          } catch (verifyError) {
+            console.log("Verification secret failed, trying access secret...");
           }
-        } else {
-          // Fallback: decode without verification (for temp tokens)
-          const base64Payload = token.split(".")[1];
-          if (!base64Payload) {
-            throw new Error("Invalid token format");
-          }
-
-          // Properly handle Buffer to string conversion
-          const payloadString = Buffer.from(base64Payload, "base64").toString("utf8");
-          const payload = JSON.parse(payloadString);
-          userId = payload.id || payload.userId || payload.sub;
         }
 
-        if (!userId) {
-          return res.status(401).json({
-            status: "error",
-            message: "Invalid token - no user ID found",
-          });
+        // Try access secret if verification didn't work
+        if (process.env.JWT_ACCESS_SECRET && !tokenDecoded) {
+          const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+          if (typeof decoded === "object" && decoded !== null) {
+            userId = decoded.id || decoded.userId || decoded.sub;
+            tokenDecoded = true;
+            console.log("Token verified with ACCESS_SECRET");
+          }
+        }
+
+        if (!tokenDecoded) {
+          throw new Error("No valid JWT secret found");
         }
       } catch (error) {
-        console.error("Token decode error:", error);
+        console.error("All JWT verification attempts failed:", error.message);
         return res.status(401).json({
           status: "error",
           message: "Invalid or expired token",
