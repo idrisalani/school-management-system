@@ -67,7 +67,7 @@ app.set("trust proxy", 1);
 // FIXED RATE LIMITING - More reasonable limits + dev skip
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // INCREASED from 10 to 50 auth attempts per 15 minutes
+  max: 200, // INCREASED from 10 to 50 auth attempts per 15 minutes
   message: {
     status: "error",
     message: "Too many authentication attempts, please try again later",
@@ -126,6 +126,18 @@ const corsOptions = {
   preflightContinue: false,
   optionsSuccessStatus: 200,
 };
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://school-management-frontend-flax.vercel.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));

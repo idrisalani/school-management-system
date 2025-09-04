@@ -422,9 +422,13 @@ const validateName = (name) => {
 const validatePhone = (phone) => {
   if (!phone) return true; // Optional field
 
-  // Basic international phone number validation
-  const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-  return phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ""));
+  // Remove spaces/hyphens, allow international format
+  const cleanPhone = phone.replace(/[\s\-\(\)]/g, "");
+
+  // Allow +234... format (7-15 digits total)
+  const phoneRegex = /^\+?[1-9]\d{6,14}$/;
+
+  return phoneRegex.test(cleanPhone);
 };
 
 // ========================= UTILITY FUNCTIONS =========================
