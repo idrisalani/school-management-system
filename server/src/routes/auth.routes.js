@@ -4,8 +4,28 @@ import authController from "../controllers/auth.controller.js";
 import logger from "../utils/logger.js";
 import passwordResetRoutes from "./passwordReset.routes.js";
 import emailService from "../services/email.service.js";
+import jwt from "jsonwebtoken"; // Fix for "Cannot find name 'jwt'"
+import pkg from "pg";
+const { Pool } = pkg;
+
+/**
+ * @typedef {Object} JwtPayload
+ * @property {string|number} [id]
+ * @property {string|number} [userId]
+ * @property {string|number} [sub]
+ * @property {string} [email]
+ * @property {string} [role]
+ * @property {number} [iat]
+ * @property {number} [exp]
+ */
 
 const router = express.Router();
+
+// Database connection (if withRequestContext is not available)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
 // Mock database query function
 const query = async (queryString, params = []) => {
@@ -452,31 +472,39 @@ router.post(
 );
 
 // Profile Completion
+// Replace the complete-profile endpoint in server/src/routes/auth.routes.js
+
 router.post(
   "/complete-profile",
   rateLimiter(rateLimits.register),
   asyncHandler(async (req, res, next) => {
     logger.info("📋 Profile completion attempt");
 
-    // For now, let's create a working endpoint that accepts the data
-    // and returns a success response
     try {
       const {
         phone,
         address,
-        dateOfBirth,
+        date_of_birth, // Fixed: using database column name
         gender,
         bio,
         // Student fields
-        gradeLevel,
-        parentEmail,
-        emergencyContact,
+        grade_level, // Fixed: using database column name
+        parent_email, // Fixed: using database column name
+        emergency_contact, // Fixed: using database column name
         // Teacher fields
         department,
         qualifications,
+        // Parent fields
+        occupation,
+        work_phone,
+        relationship_to_student,
+        // Admin fields
+        admin_level,
+        permissions,
+        employee_id,
       } = req.body;
 
-      // Get auth header and extract token
+      // 1. EXTRACT USER ID FROM TOKEN
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return res.status(401).json({
@@ -487,41 +515,292 @@ router.post(
 
       const token = authHeader.split(" ")[1];
 
-      // For now, let's create a mock successful response
-      // This will allow your frontend to work while you implement the full backend logic
-      logger.info("✅ Profile completion data received", {
+      // 2. DECODE JWT TO GET USER ID (FIXED VERSION)
+      let userId;
+      try {
+        if (process.env.JWT_ACCESS_SECRET) {
+          // Verify and decode JWT
+          const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+
+          // Type guard: Check if decoded is an object (JwtPayload) and not a string
+          if (typeof decoded === "object" && decoded !== null) {
+            // Now TypeScript knows decoded is JwtPayload
+            userId = decoded.id || decoded.userId || decoded.sub;
+          } else {
+            // decoded is a string - this shouldn't happen with proper JWT tokens
+            throw new Error("Invalid token format - unexpected string result");
+          }
+        } else {
+          // Fallback: decode without verification (for temp tokens)
+          const base64Payload = token.split(".")[1];
+          if (!base64Payload) {
+            throw new Error("Invalid token format");
+          }
+
+          // Properly handle Buffer to string conversion
+          const payloadString = Buffer.from(base64Payload, "base64").toString("utf8");
+          const payload = JSON.parse(payloadString);
+          userId = payload.id || payload.userId || payload.sub;
+        }
+
+        if (!userId) {
+          return res.status(401).json({
+            status: "error",
+            message: "Invalid token - no user ID found",
+          });
+        }
+      } catch (error) {
+        console.error("Token decode error:", error);
+        return res.status(401).json({
+          status: "error",
+          message: "Invalid or expired token",
+        });
+      }
+
+      // 3. VALIDATE REQUIRED FIELDS
+      const missingFields = [];
+      if (!phone?.trim()) missingFields.push("phone");
+      if (!address?.trim()) missingFields.push("address");
+      if (!date_of_birth) missingFields.push("date_of_birth");
+      if (!gender) missingFields.push("gender");
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          status: "error",
+          message: `Missing required fields: ${missingFields.join(", ")}`,
+          missingFields: missingFields,
+        });
+      }
+
+      // 4. VALIDATE PHONE AND GENDER
+      const phoneRegex = /^[\+]?[0-9\s\-\(\)]{10,15}$/;
+      if (!phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ""))) {
+        return res.status(400).json({
+          status: "error",
+          message: "Please provide a valid phone number",
+        });
+      }
+
+      const validGenders = ["male", "female", "other", "prefer-not-to-say"];
+      if (!validGenders.includes(gender.toLowerCase())) {
+        return res.status(400).json({
+          status: "error",
+          message: "Gender must be one of: male, female, other, prefer-not-to-say",
+        });
+      }
+
+      // 5. VALIDATE DATE OF BIRTH
+      const birthDate = new Date(date_of_birth);
+      if (isNaN(birthDate.getTime())) {
+        return res.status(400).json({
+          status: "error",
+          message: "Please provide a valid date of birth",
+        });
+      }
+
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      if (age < 5 || age > 120) {
+        return res.status(400).json({
+          status: "error",
+          message: "Please provide a valid date of birth (age must be between 5 and 120 years)",
+        });
+      }
+
+      // 6. UPDATE USER PROFILE IN DATABASE (FIXED: Use pool instead of withRequestContext)
+      logger.info("✅ Updating user profile in database", {
+        userId,
         hasPhone: !!phone,
         hasAddress: !!address,
-        hasDOB: !!dateOfBirth,
+        hasDOB: !!date_of_birth,
         gender: gender,
-        tokenLength: token?.length,
       });
 
-      // Mock successful response that matches what your frontend expects
+      await pool.query(
+        `
+        UPDATE users 
+        SET 
+          phone = $1,
+          address = $2,
+          date_of_birth = $3,
+          gender = $4,
+          bio = $5,
+          grade_level = $6,
+          parent_email = $7,
+          emergency_contact = $8,
+          department = $9,
+          qualifications = $10,
+          occupation = $11,
+          work_phone = $12,
+          relationship_to_student = $13,
+          admin_level = $14,
+          permissions = $15,
+          employee_id = $16,
+          profile_completed = true,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $17
+      `,
+        [
+          phone,
+          address,
+          date_of_birth,
+          gender,
+          bio || null,
+          grade_level || null,
+          parent_email || null,
+          emergency_contact || null,
+          department || null,
+          qualifications || null,
+          occupation || null,
+          work_phone || null,
+          relationship_to_student || null,
+          admin_level || null,
+          permissions || null,
+          employee_id || null,
+          userId,
+        ]
+      );
+
+      // 7. RETRIEVE UPDATED USER DATA FROM DATABASE
+      const userResult = await pool.query(
+        `
+        SELECT 
+          id,
+          email,
+          first_name,
+          last_name,
+          role,
+          phone,
+          address,
+          date_of_birth,
+          gender,
+          bio,
+          grade_level,
+          parent_email,
+          emergency_contact,
+          department,
+          qualifications,
+          occupation,
+          work_phone,
+          relationship_to_student,
+          admin_level,
+          permissions,
+          employee_id,
+          profile_completed,
+          is_verified,
+          status,
+          created_at,
+          updated_at
+        FROM users 
+        WHERE id = $1
+      `,
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "User not found after update",
+        });
+      }
+
+      const updatedUser = userResult.rows[0];
+
+      // 8. GENERATE NEW JWT TOKEN WITH UPDATED USER DATA
+      let newToken;
+      if (process.env.JWT_ACCESS_SECRET) {
+        const tokenPayload = {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          firstName: updatedUser.first_name,
+          lastName: updatedUser.last_name,
+          profileCompleted: updatedUser.profile_completed,
+          isVerified: updatedUser.is_verified,
+        };
+
+        try {
+          newToken = jwt.sign(tokenPayload, process.env.JWT_ACCESS_SECRET, {
+            expiresIn: "24h", // Hardcoded to avoid env variable issues
+          });
+        } catch (jwtError) {
+          console.error("JWT signing error:", jwtError);
+          return res.status(500).json({
+            status: "error",
+            message: "Failed to generate authentication token",
+          });
+        }
+      } else {
+        console.warn("JWT_ACCESS_SECRET not found, using fallback token");
+        newToken = "fallback-token-" + Date.now();
+      }
+
+      logger.info("✅ Profile completion successful", {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
+        role: updatedUser.role,
+        profileCompleted: updatedUser.profile_completed,
+      });
+
+      // 9. RETURN REAL USER DATA
       res.json({
         status: "success",
         message: "Profile completed successfully!",
         data: {
           user: {
-            id: 1,
-            email: "user@example.com",
-            role: "student",
-            firstName: "User",
-            lastName: "Name",
-            phone: phone,
-            address: address,
-            profileCompleted: true,
+            id: updatedUser.id,
+            email: updatedUser.email,
+            firstName: updatedUser.first_name,
+            lastName: updatedUser.last_name,
+            role: updatedUser.role,
+            phone: updatedUser.phone,
+            address: updatedUser.address,
+            dateOfBirth: updatedUser.date_of_birth,
+            gender: updatedUser.gender,
+            bio: updatedUser.bio,
+            gradeLevel: updatedUser.grade_level,
+            parentEmail: updatedUser.parent_email,
+            emergencyContact: updatedUser.emergency_contact,
+            department: updatedUser.department,
+            qualifications: updatedUser.qualifications,
+            occupation: updatedUser.occupation,
+            workPhone: updatedUser.work_phone,
+            relationshipToStudent: updatedUser.relationship_to_student,
+            adminLevel: updatedUser.admin_level,
+            permissions: updatedUser.permissions,
+            employeeId: updatedUser.employee_id,
+            profileCompleted: updatedUser.profile_completed,
+            isVerified: updatedUser.is_verified,
+            status: updatedUser.status,
           },
-          token: "mock-jwt-token-for-testing",
+          token: newToken,
         },
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      logger.error("Profile completion error:", error);
+      logger.error("❌ Profile completion error:", error);
+
+      // Handle specific database errors
+      if (error.code === "23505") {
+        return res.status(409).json({
+          status: "error",
+          message: "A user with this information already exists",
+        });
+      }
+
+      if (error.code === "23503") {
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid reference data provided",
+        });
+      }
+
       res.status(500).json({
         status: "error",
         message: "Failed to complete profile",
-        error: error.message,
+        error: process.env.NODE_ENV === "development" ? error.message : "Internal server error",
       });
     }
   })

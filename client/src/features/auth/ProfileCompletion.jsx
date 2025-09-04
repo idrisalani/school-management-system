@@ -1,46 +1,56 @@
 // @ts-nocheck
-// Profile Completion Component - TypeScript Fixed
+// ProfileCompletion Component - Database Schema Aligned
 // File: /client/src/features/auth/ProfileCompletion.jsx
 
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext"; // ADD THIS IMPORT
+import { useAuth } from "../../contexts/AuthContext";
 
 const ProfileCompletion = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { completeProfile } = useAuth(); // ADD THIS LINE
+  const { completeProfile } = useAuth();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [tempToken, setTempToken] = useState(null); // ADD THIS STATE
+  const [tempToken, setTempToken] = useState(null);
 
-  const [formData, setFormData] = useState(
-    /** @type {any} */ ({
-      phone: "",
-      address: "",
-      dateOfBirth: "", // Fixed field name to match backend
-      gender: "",
-      bio: "",
-      // Student fields
-      gradeLevel: "", // Fixed field name to match backend
-      parentEmail: "", // Fixed field name to match backend
-      emergencyContact: "", // Fixed field name to match backend
-      // Teacher fields
-      department: "",
-      qualifications: "",
-    })
-  );
+  // Form data matching database schema exactly
+  const [formData, setFormData] = useState({
+    // Common fields (all roles)
+    phone: "",
+    address: "",
+    date_of_birth: "", // Matches DB column name exactly
+    gender: "",
+    bio: "",
 
-  // Initialize errors as a proper string array
-  const [errors, setErrors] = useState(/** @type {string[]} */ ([]));
+    // Student-specific fields
+    grade_level: "", // Matches DB column name exactly
+    parent_email: "", // Matches DB column name exactly
+    emergency_contact: "", // Matches DB column name exactly
+
+    // Teacher-specific fields
+    department: "",
+    qualifications: "",
+
+    // Parent-specific fields
+    occupation: "",
+    work_phone: "",
+    relationship_to_student: "",
+
+    // Admin-specific fields
+    admin_level: "",
+    permissions: "",
+    employee_id: "",
+  });
+
+  const [errors, setErrors] = useState([]);
 
   useEffect(() => {
     if (location.state?.user) {
       const userData = location.state.user;
       setUser(userData);
 
-      // Get temp token from localStorage (where EmailVerification stored it)
       const storedTempToken = localStorage.getItem("tempToken");
       if (storedTempToken) {
         setTempToken(storedTempToken);
@@ -56,7 +66,6 @@ const ProfileCompletion = () => {
         });
       }
     } else {
-      // No user data - redirect to login
       navigate("/login", {
         state: {
           message: "Please verify your email to complete your profile",
@@ -65,9 +74,6 @@ const ProfileCompletion = () => {
     }
   }, [location, navigate]);
 
-  /**
-   * Handle input changes
-   */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -76,13 +82,86 @@ const ProfileCompletion = () => {
     }));
   };
 
-  /**
-   * UPDATED: Handle form submission using AuthContext
-   */
+  // Validation based on user role
+  const validateForm = () => {
+    const newErrors = [];
+
+    // Common field validation
+    if (!formData.phone.trim()) newErrors.push("Phone number is required");
+    if (!formData.address.trim()) newErrors.push("Address is required");
+    if (!formData.date_of_birth) newErrors.push("Date of birth is required");
+    if (!formData.gender) newErrors.push("Gender is required");
+
+    // Phone validation
+    const phoneRegex = /^[+]?[0-9\s\-()]{10,15}$/;
+    if (formData.phone && !phoneRegex.test(formData.phone)) {
+      newErrors.push("Please enter a valid phone number");
+    }
+
+    // Age validation
+    if (formData.date_of_birth) {
+      const birthDate = new Date(formData.date_of_birth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+
+      if (age < 5 || age > 120) {
+        newErrors.push(
+          "Please enter a valid date of birth (age must be between 5 and 120 years)"
+        );
+      }
+    }
+
+    // Role-specific validation
+    if (user?.role === "student") {
+      if (!formData.grade_level)
+        newErrors.push("Grade level is required for students");
+      if (!formData.parent_email.trim())
+        newErrors.push("Parent email is required for students");
+      if (!formData.emergency_contact.trim())
+        newErrors.push("Emergency contact is required for students");
+
+      // Parent email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (formData.parent_email && !emailRegex.test(formData.parent_email)) {
+        newErrors.push("Please enter a valid parent email address");
+      }
+    }
+
+    if (user?.role === "teacher") {
+      if (!formData.department)
+        newErrors.push("Department is required for teachers");
+      if (!formData.qualifications.trim())
+        newErrors.push("Qualifications are required for teachers");
+    }
+
+    if (user?.role === "parent") {
+      if (!formData.relationship_to_student)
+        newErrors.push("Relationship to student is required for parents");
+      if (!formData.occupation.trim())
+        newErrors.push("Occupation is required for parents");
+    }
+
+    if (user?.role === "admin") {
+      if (!formData.admin_level)
+        newErrors.push("Admin level is required for administrators");
+      if (!formData.employee_id.trim())
+        newErrors.push("Employee ID is required for administrators");
+    }
+
+    return newErrors;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrors([]);
+
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors);
+      setLoading(false);
+      return;
+    }
 
     if (!tempToken) {
       setErrors(["Session expired. Please verify your email again."]);
@@ -91,11 +170,57 @@ const ProfileCompletion = () => {
     }
 
     try {
-      const result = await completeProfile(formData, tempToken);
+      // Filter form data to only include fields relevant to the user's role
+      const relevantData = { ...formData };
+
+      // Remove irrelevant fields based on role
+      if (user.role !== "student") {
+        delete relevantData.grade_level;
+        delete relevantData.parent_email;
+        delete relevantData.emergency_contact;
+      }
+
+      if (user.role !== "teacher") {
+        delete relevantData.department;
+        delete relevantData.qualifications;
+      }
+
+      if (user.role !== "parent") {
+        delete relevantData.occupation;
+        delete relevantData.work_phone;
+        delete relevantData.relationship_to_student;
+      }
+
+      if (user.role !== "admin") {
+        delete relevantData.admin_level;
+        delete relevantData.permissions;
+        delete relevantData.employee_id;
+      }
+
+      console.log("Sending profile data:", relevantData);
+
+      const result = await completeProfile(relevantData, tempToken);
 
       if (result.success) {
         alert(result.message);
-        navigate("/dashboard");
+
+        // Navigate to appropriate dashboard based on role
+        switch (user.role) {
+          case "student":
+            navigate("/student/dashboard");
+            break;
+          case "teacher":
+            navigate("/teacher/dashboard");
+            break;
+          case "parent":
+            navigate("/parent/dashboard");
+            break;
+          case "admin":
+            navigate("/admin/dashboard");
+            break;
+          default:
+            navigate("/dashboard");
+        }
       } else {
         setErrors([result.message]);
       }
@@ -107,7 +232,6 @@ const ProfileCompletion = () => {
     }
   };
 
-  // UPDATED: Loading state - check for both user and tempToken
   if (!user || !tempToken) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -119,11 +243,27 @@ const ProfileCompletion = () => {
     );
   }
 
-  // Get user's display name safely with proper fallbacks
   const displayName =
-    (user &&
-      (user.firstName || user.first_name || user.name || user.username)) ||
+    user?.firstName ||
+    user?.first_name ||
+    user?.name ||
+    user?.username ||
     "User";
+
+  const getRoleDisplayName = (role) => {
+    switch (role) {
+      case "student":
+        return "Student";
+      case "teacher":
+        return "Teacher";
+      case "parent":
+        return "Parent/Guardian";
+      case "admin":
+        return "Administrator";
+      default:
+        return "User";
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -133,7 +273,8 @@ const ProfileCompletion = () => {
             Complete Your Profile
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Welcome {displayName}! Please complete your profile to continue.
+            Welcome {displayName}! Please complete your{" "}
+            {getRoleDisplayName(user.role).toLowerCase()} profile to continue.
           </p>
           <div className="mt-4 bg-green-50 border border-green-200 rounded-md p-3">
             <p className="text-sm text-green-800 text-center">
@@ -153,8 +294,12 @@ const ProfileCompletion = () => {
             </div>
           )}
 
-          {/* Common fields */}
+          {/* Common fields for all roles */}
           <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
+              Basic Information
+            </h3>
+
             <input
               type="tel"
               name="phone"
@@ -175,14 +320,19 @@ const ProfileCompletion = () => {
               required
             />
 
-            <input
-              type="date"
-              name="dateOfBirth"
-              value={formData.dateOfBirth}
-              onChange={handleInputChange}
-              className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date of Birth *
+              </label>
+              <input
+                type="date"
+                name="date_of_birth"
+                value={formData.date_of_birth}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
 
             <select
               name="gender"
@@ -195,7 +345,7 @@ const ProfileCompletion = () => {
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
+              <option value="prefer-not-to-say">Prefer not to say</option>
             </select>
 
             <textarea
@@ -209,32 +359,35 @@ const ProfileCompletion = () => {
           </div>
 
           {/* Student-specific fields */}
-          {user && user.role === "student" && (
+          {user?.role === "student" && (
             <div className="space-y-4 border-t pt-4">
               <h3 className="text-lg font-medium text-gray-900">
                 Student Information
               </h3>
 
               <select
-                name="gradeLevel"
-                value={formData.gradeLevel}
+                name="grade_level"
+                value={formData.grade_level}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               >
                 <option value="">Select Grade Level *</option>
+                <option value="K">Kindergarten</option>
                 {[...Array(12)].map((_, i) => (
-                  <option key={i + 1} value={i + 1}>
+                  <option key={i + 1} value={`Grade ${i + 1}`}>
                     Grade {i + 1}
                   </option>
                 ))}
+                <option value="Undergraduate">Undergraduate</option>
+                <option value="Graduate">Graduate</option>
               </select>
 
               <input
                 type="email"
-                name="parentEmail"
+                name="parent_email"
                 placeholder="Parent/Guardian Email *"
-                value={formData.parentEmail}
+                value={formData.parent_email}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -242,9 +395,9 @@ const ProfileCompletion = () => {
 
               <input
                 type="tel"
-                name="emergencyContact"
+                name="emergency_contact"
                 placeholder="Emergency Contact Number *"
-                value={formData.emergencyContact}
+                value={formData.emergency_contact}
                 onChange={handleInputChange}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -253,7 +406,7 @@ const ProfileCompletion = () => {
           )}
 
           {/* Teacher-specific fields */}
-          {user && user.role === "teacher" && (
+          {user?.role === "teacher" && (
             <div className="space-y-4 border-t pt-4">
               <h3 className="text-lg font-medium text-gray-900">
                 Teacher Information
@@ -269,12 +422,15 @@ const ProfileCompletion = () => {
                 <option value="">Select Department *</option>
                 <option value="Mathematics">Mathematics</option>
                 <option value="Science">Science</option>
-                <option value="English">English</option>
+                <option value="English">English Language Arts</option>
                 <option value="Social Studies">Social Studies</option>
                 <option value="Physical Education">Physical Education</option>
-                <option value="Art">Art</option>
+                <option value="Art">Visual Arts</option>
                 <option value="Music">Music</option>
                 <option value="Computer Science">Computer Science</option>
+                <option value="Foreign Language">Foreign Language</option>
+                <option value="Special Education">Special Education</option>
+                <option value="Administration">Administration</option>
               </select>
 
               <textarea
@@ -285,6 +441,93 @@ const ProfileCompletion = () => {
                 rows={3}
                 className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
+              />
+            </div>
+          )}
+
+          {/* Parent-specific fields */}
+          {user?.role === "parent" && (
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Parent/Guardian Information
+              </h3>
+
+              <select
+                name="relationship_to_student"
+                value={formData.relationship_to_student}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Relationship to Student *</option>
+                <option value="Mother">Mother</option>
+                <option value="Father">Father</option>
+                <option value="Guardian">Guardian</option>
+                <option value="Grandparent">Grandparent</option>
+                <option value="Aunt/Uncle">Aunt/Uncle</option>
+                <option value="Other">Other</option>
+              </select>
+
+              <input
+                type="text"
+                name="occupation"
+                placeholder="Occupation *"
+                value={formData.occupation}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+
+              <input
+                type="tel"
+                name="work_phone"
+                placeholder="Work Phone Number (optional)"
+                value={formData.work_phone}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Admin-specific fields */}
+          {user?.role === "admin" && (
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Administrator Information
+              </h3>
+
+              <select
+                name="admin_level"
+                value={formData.admin_level}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Select Admin Level *</option>
+                <option value="Super Admin">Super Admin</option>
+                <option value="School Admin">School Admin</option>
+                <option value="Department Head">Department Head</option>
+                <option value="System Admin">System Admin</option>
+                <option value="Support Staff">Support Staff</option>
+              </select>
+
+              <input
+                type="text"
+                name="employee_id"
+                placeholder="Employee ID *"
+                value={formData.employee_id}
+                onChange={handleInputChange}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+
+              <textarea
+                name="permissions"
+                placeholder="Special Permissions/Notes (optional)"
+                value={formData.permissions}
+                onChange={handleInputChange}
+                rows={2}
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           )}
