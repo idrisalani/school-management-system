@@ -4,15 +4,16 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import api from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext"; // ADD THIS IMPORT
 
 const ProfileCompletion = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { completeProfile } = useAuth(); // ADD THIS LINE
 
-  // Use type assertions and proper initial values to fix TypeScript inference
-  const [user, setUser] = useState(/** @type {any} */ (null));
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tempToken, setTempToken] = useState(null); // ADD THIS STATE
 
   const [formData, setFormData] = useState(
     /** @type {any} */ ({
@@ -35,17 +36,32 @@ const ProfileCompletion = () => {
   const [errors, setErrors] = useState(/** @type {string[]} */ ([]));
 
   useEffect(() => {
-    // Get user data and temp token from location state
-    if (location.state?.user && location.state?.tempToken) {
+    if (location.state?.user) {
       const userData = location.state.user;
       setUser(userData);
 
-      // Set the temp token in API headers
-      api.defaults.headers.common["Authorization"] =
-        `Bearer ${location.state.tempToken}`;
+      // Get temp token from localStorage (where EmailVerification stored it)
+      const storedTempToken = localStorage.getItem("tempToken");
+      if (storedTempToken) {
+        setTempToken(storedTempToken);
+      } else {
+        console.warn(
+          "No temp token found - user may need to verify email again"
+        );
+        navigate("/login", {
+          state: {
+            message:
+              "Session expired. Please login or verify your email again.",
+          },
+        });
+      }
     } else {
-      // Redirect to login if no user data or token
-      navigate("/login");
+      // No user data - redirect to login
+      navigate("/login", {
+        state: {
+          message: "Please verify your email to complete your profile",
+        },
+      });
     }
   }, [location, navigate]);
 
@@ -61,69 +77,43 @@ const ProfileCompletion = () => {
   };
 
   /**
-   * Handle form submission
+   * UPDATED: Handle form submission using AuthContext
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrors([]);
 
+    if (!tempToken) {
+      setErrors(["Session expired. Please verify your email again."]);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await api.post("/auth/complete-profile", formData);
+      const result = await completeProfile(formData, tempToken);
 
-      if (response.data.status === "success") {
-        // Store the new access token and user data
-        localStorage.setItem("token", response.data.data.token);
-        localStorage.setItem("user", JSON.stringify(response.data.data.user));
-
-        // Update API headers with the real token
-        api.defaults.headers.common["Authorization"] =
-          `Bearer ${response.data.data.token}`;
-
-        // Show success message and redirect to dashboard
-        alert(
-          "Profile completed successfully! Welcome to the School Management System."
-        );
+      if (result.success) {
+        alert(result.message);
         navigate("/dashboard");
+      } else {
+        setErrors([result.message]);
       }
     } catch (error) {
       console.error("Profile completion error:", error);
-
-      if (error.response?.data?.errors) {
-        // Handle validation errors - convert object to array
-        const errorList = [];
-        if (
-          typeof error.response.data.errors === "object" &&
-          !Array.isArray(error.response.data.errors)
-        ) {
-          Object.entries(error.response.data.errors).forEach(
-            ([field, message]) => {
-              errorList.push(`${field}: ${message}`);
-            }
-          );
-        } else if (Array.isArray(error.response.data.errors)) {
-          errorList.push(...error.response.data.errors);
-        } else {
-          errorList.push(String(error.response.data.errors));
-        }
-        setErrors(errorList);
-      } else if (error.response?.data?.message) {
-        setErrors([error.response.data.message]);
-      } else {
-        setErrors(["Failed to complete profile. Please try again."]);
-      }
+      setErrors(["Failed to complete profile. Please try again."]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Loading state
-  if (!user) {
+  // UPDATED: Loading state - check for both user and tempToken
+  if (!user || !tempToken) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Loading...</p>
+          <p>Loading profile completion...</p>
         </div>
       </div>
     );
