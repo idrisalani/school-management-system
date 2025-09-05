@@ -820,64 +820,164 @@ export const checkEmailExists = async (req, res) => {
 };
 
 /**
- * Complete user profile after email verification
+ * Complete user profile after email verification - TypeScript Compatible
+ * @param {ExpressRequest & AuthRequest} req
+ * @param {ExpressResponse} res
+ * @param {ExpressNextFunction} next
  */
 export const completeProfile = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+    // Extract authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({
+        status: "error",
+        message: "Authorization token required",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
 
+    const token = authHeader.split(" ")[1];
     if (!token) {
-      throw new AuthenticationError("Profile completion token required");
+      res.status(401).json({
+        status: "error",
+        message: "Profile completion token required",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+    // JWT verification with explicit type handling
+    let decodedToken;
+    try {
+      const verifyResult = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
 
-    // JavaScript-compatible type checking instead of TypeScript 'as'
-    if (typeof decoded !== "object" || decoded === null) {
-      throw new AuthenticationError("Invalid token format");
+      // Handle both string and object results from jwt.verify
+      if (typeof verifyResult === "string") {
+        res.status(401).json({
+          status: "error",
+          message: "Invalid token format",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // Cast to our expected type
+      decodedToken = verifyResult;
+    } catch (jwtError) {
+      logger.error("JWT verification failed:", jwtError.message);
+      res.status(401).json({
+        status: "error",
+        message: "Invalid or expired token",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
-    // Use bracket notation instead of type assertion
-    if (!decoded["purpose"] || decoded["purpose"] !== "profile_completion") {
-      throw new AuthenticationError("Invalid token purpose");
+    // Extract user ID with safe property access
+    const userId = decodedToken.userId || decodedToken.id;
+    if (!userId) {
+      res.status(401).json({
+        status: "error",
+        message: "Invalid token - missing user ID",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
-    if (!decoded["userId"]) {
-      throw new AuthenticationError("Invalid token - missing user ID");
+    // Validate token purpose if it exists
+    if (decodedToken.purpose && decodedToken.purpose !== "profile_completion") {
+      res.status(401).json({
+        status: "error",
+        message: "Invalid token purpose",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
-    // Extract values with proper checking
-    const userId = decoded["userId"];
     const profileData = req.body;
+    logger.info("Profile completion attempt", {
+      userId,
+      hasData: !!profileData,
+      dataKeys: Object.keys(profileData || {}),
+    });
 
-    // Get user info
+    // Get user information from database
     const userResult = await query(
-      "SELECT id, role, is_verified, first_name, last_name, email FROM users WHERE id = $1",
+      "SELECT id, role, is_verified, first_name, last_name, email, profile_completed FROM users WHERE id = $1",
       [userId]
     );
 
-    if (userResult.rows.length === 0 || !userResult.rows[0].is_verified) {
-      throw new AuthenticationError("User not found or not verified");
+    if (userResult.rows.length === 0) {
+      res.status(404).json({
+        status: "error",
+        message: "User not found",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
     const user = userResult.rows[0];
-    const userRole = user.role;
 
-    // Validate required fields based on role
-    const requiredFields = ["phone", "address", "dateOfBirth", "gender"];
-    if (userRole === "student") {
-      requiredFields.push("gradeLevel", "parentEmail", "emergencyContact");
-    } else if (userRole === "teacher") {
-      requiredFields.push("department", "qualifications");
+    // Validation checks
+    if (!user.is_verified) {
+      res.status(400).json({
+        status: "error",
+        message: "Email must be verified before completing profile",
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
 
+    if (user.profile_completed) {
+      res.status(400).json({
+        status: "error",
+        message: "Profile is already completed",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Validate required fields based on role
+    const userRole = user.role;
+    const requiredFields = ["phone", "address", "date_of_birth", "gender"];
+    const missingFields = [];
+
+    // Check common required fields
     for (const field of requiredFields) {
-      if (!profileData[field]) {
-        throw new ValidationError(`${field} is required for ${userRole}s`);
+      if (!profileData[field] || String(profileData[field]).trim() === "") {
+        missingFields.push(field);
       }
     }
 
-    // Update user profile
+    // Role-specific validation
+    if (userRole === "student") {
+      if (!profileData.grade_level) missingFields.push("grade_level");
+      if (!profileData.parent_email) missingFields.push("parent_email");
+      if (!profileData.emergency_contact) missingFields.push("emergency_contact");
+    } else if (userRole === "teacher") {
+      if (!profileData.department) missingFields.push("department");
+      if (!profileData.qualifications) missingFields.push("qualifications");
+    } else if (userRole === "parent") {
+      if (!profileData.relationship_to_student) missingFields.push("relationship_to_student");
+      if (!profileData.occupation) missingFields.push("occupation");
+    } else if (userRole === "admin") {
+      if (!profileData.admin_level) missingFields.push("admin_level");
+      if (!profileData.employee_id) missingFields.push("employee_id");
+    }
+
+    if (missingFields.length > 0) {
+      res.status(400).json({
+        status: "error",
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+        missingFields,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Update user profile in database
     const updateQuery = `
       UPDATE users SET 
         phone = $1, 
@@ -885,27 +985,59 @@ export const completeProfile = async (req, res, next) => {
         date_of_birth = $3, 
         gender = $4, 
         bio = $5,
-        parent_email = $6,
-        emergency_contact = $7,
-        qualifications = $8,
+        grade_level = $6,
+        parent_email = $7,
+        emergency_contact = $8,
+        department = $9,
+        qualifications = $10,
+        occupation = $11,
+        work_phone = $12,
+        relationship_to_student = $13,
+        admin_level = $14,
+        employee_id = $15,
+        permissions = $16,
         profile_completed = true,
         profile_completed_at = NOW(),
         updated_at = NOW()
-      WHERE id = $9
-      RETURNING id, username, first_name, last_name, email, role
+      WHERE id = $17
+      RETURNING id, username, first_name, last_name, email, role, is_verified, profile_completed, created_at
     `;
 
-    const updateResult = await query(updateQuery, [
-      profileData.phone,
-      profileData.address,
-      profileData.dateOfBirth,
-      profileData.gender,
+    const updateValues = [
+      profileData.phone || null,
+      profileData.address || null,
+      profileData.date_of_birth || null,
+      profileData.gender || null,
       profileData.bio || null,
-      profileData.parentEmail || null,
-      profileData.emergencyContact || null,
+      // Student fields
+      profileData.grade_level || null,
+      profileData.parent_email || null,
+      profileData.emergency_contact || null,
+      // Teacher fields
+      profileData.department || null,
       profileData.qualifications || null,
+      // Parent fields
+      profileData.occupation || null,
+      profileData.work_phone || null,
+      profileData.relationship_to_student || null,
+      // Admin fields
+      profileData.admin_level || null,
+      profileData.employee_id || null,
+      profileData.permissions || null,
+      // User ID
       userId,
-    ]);
+    ];
+
+    const updateResult = await query(updateQuery, updateValues);
+
+    if (updateResult.rows.length === 0) {
+      res.status(500).json({
+        status: "error",
+        message: "Failed to update profile",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
 
     const updatedUser = updateResult.rows[0];
 
@@ -919,11 +1051,11 @@ export const completeProfile = async (req, res, next) => {
       metadata: {
         profileCompletion: true,
         role: userRole,
-        completedFields: requiredFields,
+        completedFields: Object.keys(profileData),
       },
     });
 
-    // Generate full access token
+    // Generate access token for authenticated user
     const accessToken = generateAccessToken({
       id: updatedUser.id,
       username: updatedUser.username,
@@ -937,6 +1069,7 @@ export const completeProfile = async (req, res, next) => {
       role: userRole,
     });
 
+    // Send success response
     res.status(200).json({
       status: "success",
       message: "Profile completed successfully!",
@@ -945,6 +1078,9 @@ export const completeProfile = async (req, res, next) => {
           ...updatedUser,
           is_verified: true,
           profile_completed: true,
+          phone: profileData.phone,
+          address: profileData.address,
+          date_of_birth: profileData.date_of_birth,
         }),
         token: accessToken,
       },
@@ -953,9 +1089,17 @@ export const completeProfile = async (req, res, next) => {
   } catch (error) {
     logger.error("Profile completion error:", {
       error: error.message,
+      stack: error.stack,
+      userId: req.body?.userId,
       ip: req.ip,
     });
-    next(error);
+
+    // Send error response
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error during profile completion",
+      timestamp: new Date().toISOString(),
+    });
   }
 };
 

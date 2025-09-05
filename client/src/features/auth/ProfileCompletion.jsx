@@ -1,4 +1,4 @@
-// Enhanced ProfileCompletion.jsx - With Comprehensive Debugging
+// ProfileCompletion.jsx - Production Version
 // @ts-nocheck
 // File: /client/src/features/auth/ProfileCompletion.jsx
 
@@ -14,7 +14,6 @@ const ProfileCompletion = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tempToken, setTempToken] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({});
 
   // Form data matching database schema exactly
   const [formData, setFormData] = useState({
@@ -47,7 +46,7 @@ const ProfileCompletion = () => {
 
   const [errors, setErrors] = useState([]);
 
-  // BROWSER-COMPATIBLE JWT DECODE FUNCTION
+  // Browser-compatible JWT decode function
   const decodeJWT = (token) => {
     try {
       const parts = token.split(".");
@@ -74,63 +73,21 @@ const ProfileCompletion = () => {
   };
 
   useEffect(() => {
-    // COMPREHENSIVE DEBUG ANALYSIS
-    console.group("🔍 ProfileCompletion Component Debug Analysis");
-
-    // 1. Check location.state
-    console.log("📍 Location state:", location.state);
-    console.log("📍 Location pathname:", location.pathname);
-
-    // 2. Check for user data in location.state
+    // Get user data from location.state
     const stateUser = location.state?.user;
-    console.log("👤 User from location.state:", stateUser);
 
-    if (stateUser) {
-      console.log("👤 User object keys:", Object.keys(stateUser));
-      console.log("👤 User role (direct):", stateUser.role);
-      console.log("👤 User role (snake_case):", stateUser.user_role);
-    }
-
-    // 3. Check localStorage for temp token
+    // Get temp token from localStorage
     const storedTempToken = localStorage.getItem("tempToken");
-    console.log("🎫 Temp token from localStorage:", !!storedTempToken);
 
-    // 4. Check other localStorage items
-    const storedAuth = localStorage.getItem("authToken");
+    // Get stored user data as fallback
     const storedUser = localStorage.getItem("user");
-    console.log("💾 Stored auth token:", !!storedAuth);
-    console.log("💾 Stored user data:", storedUser);
 
-    // 5. Analyze role sources
-    const roleSources = {
-      fromLocationState: stateUser?.role,
-      fromLocationStateSnake: stateUser?.user_role,
-      fromStoredUser: storedUser ? JSON.parse(storedUser).role : null,
-      fromToken: null,
-    };
-
-    // 6. Try to decode token for role
-    if (storedTempToken) {
-      const tokenPayload = decodeJWT(storedTempToken);
-      if (tokenPayload) {
-        console.log("🎫 Token payload:", tokenPayload);
-        roleSources.fromToken = tokenPayload.role;
-      }
-    }
-
-    console.log("🎯 Role sources analysis:", roleSources);
-
-    // 7. Determine final user data and role
+    // Determine role from multiple sources
     let finalUser = stateUser;
-    let finalRole =
-      roleSources.fromLocationState ||
-      roleSources.fromLocationStateSnake ||
-      roleSources.fromToken ||
-      roleSources.fromStoredUser;
+    let finalRole = stateUser?.role || stateUser?.user_role;
 
-    // 8. If no user data from state, try to construct from token
+    // If no user data from state, try to construct from token
     if (!finalUser && storedTempToken) {
-      console.log("🔧 No user in state, attempting to construct from token...");
       const tokenPayload = decodeJWT(storedTempToken);
       if (tokenPayload) {
         finalUser = {
@@ -141,49 +98,25 @@ const ProfileCompletion = () => {
           lastName: tokenPayload.lastName || tokenPayload.last_name,
         };
         finalRole = tokenPayload.role;
-        console.log("🔧 User constructed from token:", finalUser);
       }
     }
 
-    // 9. Final validation and warnings
-    if (!finalUser) {
-      console.error("❌ CRITICAL: No user data available from any source!");
-      console.log("🔍 This suggests either:");
-      console.log("   - EmailVerification didn't pass user data properly");
-      console.log("   - User navigated directly to this page");
-      console.log(
-        "   - Backend email verification endpoint isn't returning user data"
-      );
+    // Fallback to stored user data
+    if (!finalRole && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        finalRole = parsedUser.role;
+      } catch (error) {
+        console.error("Error parsing stored user data:", error);
+      }
     }
 
-    if (!finalRole) {
-      console.error("❌ CRITICAL: No role found from any source!");
-      console.log("🔍 This suggests:");
-      console.log("   - Backend user registration didn't set role");
-      console.log("   - Email verification endpoint not including role");
-      console.log("   - JWT token generation not including role");
-    }
-
-    console.log("✅ Final user data:", finalUser);
-    console.log("✅ Final role:", finalRole);
-    console.groupEnd();
-
-    // 10. Set component state
+    // Set component state
     setUser(finalUser);
     setTempToken(storedTempToken);
-    setDebugInfo({
-      hasLocationState: !!location.state,
-      hasUserInState: !!stateUser,
-      hasTempToken: !!storedTempToken,
-      roleSources,
-      finalRole,
-      fromEmailVerification: location.state?.fromEmailVerification,
-      timestamp: new Date().toISOString(),
-    });
 
-    // 11. Handle navigation if critical data is missing
+    // Handle navigation if critical data is missing
     if (!finalUser) {
-      console.log("🔄 No user data found, redirecting to login");
       navigate("/login", {
         replace: true,
         state: {
@@ -194,9 +127,6 @@ const ProfileCompletion = () => {
     }
 
     if (!storedTempToken) {
-      console.warn(
-        "⚠️ No temp token found - user may need to verify email again"
-      );
       navigate("/login", {
         replace: true,
         state: {
@@ -289,15 +219,6 @@ const ProfileCompletion = () => {
     setLoading(true);
     setErrors([]);
 
-    // DEBUG: Profile submission
-    console.group("📝 Profile Submission Debug");
-    console.log("User ID:", user?.id);
-    console.log("User Role:", user?.role);
-    console.log("Form Data:", formData);
-    console.log("Temp Token exists:", !!tempToken);
-    console.log("Auth Context available:", !!completeProfile);
-    console.groupEnd();
-
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
@@ -345,18 +266,13 @@ const ProfileCompletion = () => {
         delete relevantData.employee_id;
       }
 
-      console.log("Sending filtered profile data:", relevantData);
-
       const result = await completeProfile(relevantData, tempToken);
 
       if (result.success) {
-        alert(result.message);
-
         // Clear temp token
         localStorage.removeItem("tempToken");
 
         // Navigate to appropriate dashboard based on role
-        console.log(`🚀 Navigating to ${user.role} dashboard`);
         switch (user.role) {
           case "student":
             navigate("/student/dashboard");
@@ -390,28 +306,7 @@ const ProfileCompletion = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Loading profile completion...</p>
-
-          {/* DEBUG PANEL for loading state */}
-          <div
-            style={{
-              background: "#ffe6e6",
-              padding: "15px",
-              margin: "15px 0",
-              border: "1px solid #ffcccc",
-              fontSize: "12px",
-              textAlign: "left",
-            }}
-          >
-            <strong>🔍 Loading Debug:</strong>
-            <div>Has User: {user ? "Yes" : "No"}</div>
-            <div>Has Temp Token: {tempToken ? "Yes" : "No"}</div>
-            <div>Location State: {location.state ? "Yes" : "No"}</div>
-            {!user && <div style={{ color: "red" }}>⚠️ No user data found</div>}
-            {!tempToken && (
-              <div style={{ color: "red" }}>⚠️ No temp token found</div>
-            )}
-          </div>
+          <p className="text-gray-600">Loading profile completion...</p>
         </div>
       </div>
     );
@@ -455,57 +350,6 @@ const ProfileCompletion = () => {
               ✓ Email verified successfully! Complete your profile below.
             </p>
           </div>
-        </div>
-
-        {/* COMPREHENSIVE DEBUG PANEL - Remove in production */}
-        <div
-          style={{
-            background: "#e6f3ff",
-            padding: "15px",
-            margin: "15px 0",
-            border: "1px solid #b3d9ff",
-            fontSize: "14px",
-            borderRadius: "5px",
-          }}
-        >
-          <strong>🔍 Debug Information:</strong>
-          <div>
-            <strong>User ID:</strong> {user?.id || "Not found"}
-          </div>
-          <div>
-            <strong>Email:</strong> {user?.email || "Not found"}
-          </div>
-          <div>
-            <strong>Role:</strong> {user?.role || "Not found"}
-          </div>
-          <div>
-            <strong>From Email Verification:</strong>{" "}
-            {debugInfo.fromEmailVerification ? "Yes" : "No"}
-          </div>
-          <div>
-            <strong>Has Temp Token:</strong>{" "}
-            {debugInfo.hasTempToken ? "Yes" : "No"}
-          </div>
-          <div>
-            <strong>Role Sources:</strong>
-          </div>
-          <div style={{ marginLeft: "20px", fontSize: "12px" }}>
-            <div>
-              From State: {debugInfo.roleSources?.fromLocationState || "None"}
-            </div>
-            <div>From Token: {debugInfo.roleSources?.fromToken || "None"}</div>
-            <div>
-              From Stored: {debugInfo.roleSources?.fromStoredUser || "None"}
-            </div>
-          </div>
-          {!user?.role && (
-            <div
-              style={{ color: "red", fontWeight: "bold", marginTop: "10px" }}
-            >
-              ⚠️ WARNING: No role detected! Check backend email verification
-              endpoint.
-            </div>
-          )}
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
