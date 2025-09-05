@@ -1608,7 +1608,7 @@ The School Management Team
 // ========================= EMAIL VERIFICATION =========================
 
 /**
- * Enhanced email verification
+ * Enhanced email verification - FIXED VERSION
  * @param {ExpressRequest & AuthRequest} req
  * @param {ExpressResponse} res
  * @param {ExpressNextFunction} next
@@ -1622,39 +1622,85 @@ export const verifyEmail = async (req, res, next) => {
       throw new ValidationError("Verification token is required");
     }
 
+    logger.info("🔍 Email verification attempt", {
+      token: token.substring(0, 10) + "...",
+      ip: req.ip,
+    });
+
     // Verify email token
     const decoded = verifyVerificationToken(token);
+    logger.debug("🎫 Token decoded successfully", { userId: decoded.userId });
 
-    // Update user verification status
+    // CRITICAL FIX: Include role and profile_completed in the RETURNING clause
     const result = await query(
       `UPDATE users 
        SET is_verified = true, 
            email_verified_at = NOW(),
            updated_at = NOW() 
        WHERE id = $1 AND is_verified = false
-       RETURNING id, email, first_name, last_name`,
+       RETURNING id, email, first_name, last_name, role, profile_completed, status`,
       [decoded.userId]
     );
 
     if (result.rows.length === 0) {
       // Check if user exists but is already verified
-      const userCheck = await query("SELECT is_verified FROM users WHERE id = $1", [
-        decoded.userId,
-      ]);
+      const userCheck = await query(
+        "SELECT id, email, first_name, last_name, role, profile_completed, is_verified FROM users WHERE id = $1",
+        [decoded.userId]
+      );
 
-      if (userCheck.rows.length > 0 && userCheck.rows[0].is_verified) {
-        res.json({
-          status: "success",
-          message: "Email is already verified",
-          timestamp: new Date().toISOString(),
-        });
-        return;
+      if (userCheck.rows.length > 0) {
+        const existingUser = userCheck.rows[0];
+
+        if (existingUser.is_verified) {
+          logger.info("📧 Email already verified", { userId: existingUser.id });
+
+          // Return success response with complete user data including role
+          res.json({
+            status: "success",
+            message: "Email is already verified",
+            data: {
+              user: {
+                id: existingUser.id,
+                email: existingUser.email,
+                first_name: existingUser.first_name,
+                last_name: existingUser.last_name,
+                role: existingUser.role, // ← CRITICAL: Include role
+                profile_completed: existingUser.profile_completed,
+                is_verified: true,
+              },
+              nextStep: existingUser.profile_completed ? "login" : "complete_profile",
+              tempToken: existingUser.profile_completed
+                ? null
+                : jwt.sign(
+                    {
+                      userId: existingUser.id,
+                      role: existingUser.role, // ← CRITICAL: Include role in token
+                      purpose: "profile_completion",
+                    },
+                    process.env.JWT_SECRET || "your-secret-key",
+                    { expiresIn: "2h" }
+                  ),
+            },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
       }
 
       throw new AuthenticationError("Invalid verification token or user not found");
     }
 
     const user = result.rows[0];
+
+    // ENHANCED LOGGING: Show what we got from the database
+    logger.info("✅ User verification data retrieved", {
+      userId: user.id,
+      email: user.email,
+      role: user.role, // ← This should now have a value
+      profile_completed: user.profile_completed,
+      hasRole: !!user.role,
+    });
 
     await createAuditLog({
       action: AUDIT_ACTIONS.EMAIL_VERIFIED,
@@ -1721,18 +1767,19 @@ The School Management Team
       }
     });
 
-    logger.info("📧 Email verified successfully", { userId: user.id });
+    logger.info("📧 Email verified successfully", {
+      userId: user.id,
+      role: user.role,
+      profile_completed: user.profile_completed,
+    });
 
-    // Check if profile is completed to determine next step
-    const profileCheck = await query("SELECT profile_completed FROM users WHERE id = $1", [
-      user.id,
-    ]);
+    // Determine next step based on profile completion status
+    const isProfileCompleted = user.profile_completed || false;
 
-    const isProfileCompleted = profileCheck.rows[0]?.profile_completed || false;
-
-    logger.info("Profile completion status check", {
+    logger.info("📋 Profile completion check", {
       userId: user.id,
       isProfileCompleted,
+      nextStep: isProfileCompleted ? "login" : "complete_profile",
     });
 
     if (isProfileCompleted) {
@@ -1741,32 +1788,65 @@ The School Management Team
         status: "success",
         message: "Email verified successfully! You can now log in.",
         data: {
-          user: formatUserResponse(user),
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role, // ← CRITICAL: Include role in response
+            profile_completed: user.profile_completed,
+            is_verified: true,
+            status: user.status,
+          },
           nextStep: "login",
         },
         timestamp: new Date().toISOString(),
       });
     } else {
-      // Profile not completed - generate temp token and redirect to profile completion
+      // Profile not completed - generate temp token with role and redirect to profile completion
       const tempToken = jwt.sign(
-        { userId: user.id, purpose: "profile_completion" },
+        {
+          userId: user.id,
+          id: user.id, // ← Include both for compatibility
+          email: user.email,
+          role: user.role, // ← CRITICAL: Include role in token
+          purpose: "profile_completion",
+        },
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "2h" }
       );
+
+      logger.info("🎫 Generated temp token with role", {
+        userId: user.id,
+        role: user.role,
+        tokenHasRole: true,
+      });
 
       res.json({
         status: "success",
         message: "Email verified successfully! Please complete your profile to continue.",
         data: {
-          user: formatUserResponse(user),
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role, // ← CRITICAL: Include role in response
+            profile_completed: user.profile_completed,
+            is_verified: true,
+            status: user.status,
+          },
           tempToken,
-          nextStep: "complete-profile",
+          nextStep: "complete_profile",
         },
         timestamp: new Date().toISOString(),
       });
     }
   } catch (error) {
-    logger.error("💥 Email verification error", { error: error.message });
+    logger.error("💥 Email verification error", {
+      error: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
     next(error);
   }
 };
