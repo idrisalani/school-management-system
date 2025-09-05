@@ -81,12 +81,14 @@ const EmailVerification = () => {
   const handleContinue = () => {
     const { nextStep, user, tempToken } = verificationState;
 
-    // ADD DEBUG LOGGING
+    // ENHANCED DEBUG LOGGING
     console.log("🔍 EmailVerification Debug:", {
       nextStep,
       hasUser: !!user,
       hasTempToken: !!tempToken,
       userProfileCompleted: user?.profile_completed,
+      userRole: user?.role, // ← ADD THIS
+      userObject: user, // ← ADD THIS to see full user object
       verificationState: verificationState,
     });
 
@@ -99,12 +101,54 @@ const EmailVerification = () => {
         console.warn("⚠️ No temp token provided for profile completion");
       }
 
-      // Navigate to profile completion with user data
+      // ENHANCED: Ensure user object has all required properties
+      const userDataForProfile = {
+        id: user?.id,
+        email: user?.email,
+        firstName: user?.firstName || user?.first_name,
+        lastName: user?.lastName || user?.last_name,
+        role: user?.role, // ← This is critical
+        isVerified: user?.isVerified || user?.is_verified,
+        profileCompleted: user?.profileCompleted || user?.profile_completed,
+      };
+
+      // DEBUG: Log what we're actually passing
+      console.log(
+        "👤 User data being passed to ProfileCompletion:",
+        userDataForProfile
+      );
+
+      // Check if role is missing and handle it
+      if (!userDataForProfile.role) {
+        console.error("❌ CRITICAL: User role is missing!");
+        console.log("Available user properties:", Object.keys(user || {}));
+
+        // Try to get role from tempToken as fallback
+        if (tempToken) {
+          try {
+            const parts = tempToken.split(".");
+            if (parts.length === 3) {
+              const payload = JSON.parse(
+                Buffer.from(parts[1], "base64").toString("utf8")
+              );
+              userDataForProfile.role = payload.role;
+              console.log("🔧 Role retrieved from token:", payload.role);
+            }
+          } catch (error) {
+            console.error("Failed to decode role from token:", error);
+          }
+        }
+      }
+
+      // Navigate to profile completion with enhanced user data
       navigate("/complete-profile", {
-        state: { user },
+        state: { user: userDataForProfile },
         replace: true,
       });
-      console.log("🚀 Navigating to profile completion");
+      console.log(
+        "🚀 Navigating to profile completion with role:",
+        userDataForProfile.role
+      );
     } else if (nextStep === "login") {
       console.log("🔄 Redirecting to login");
       navigate("/login", { replace: true });
