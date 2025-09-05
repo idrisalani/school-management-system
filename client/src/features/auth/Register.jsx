@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PropTypes from "prop-types";
 import {
@@ -136,8 +136,13 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState("checking");
   const [registeredEmail, setRegisteredEmail] = useState("");
+
+  // Refs for cleanup
+  const abortControllerRef = useRef(null);
+  const healthCheckTimeoutRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
 
   // Email validation hook
   const { emailStatus, checkEmail, resetEmailStatus } = useEmailValidation();
@@ -147,6 +152,84 @@ const Register = () => {
 
   /** @type {[FormErrors, React.Dispatch<React.SetStateAction<FormErrors>>]} */
   const [errors, setErrors] = useState(/** @type {FormErrors} */ ({}));
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (healthCheckTimeoutRef.current) {
+      clearTimeout(healthCheckTimeoutRef.current);
+      healthCheckTimeoutRef.current = null;
+    }
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Improved health check function
+  const checkServerConnection = useCallback(async () => {
+    // Clean up any existing requests
+    cleanup();
+
+    try {
+      // Create new abort controller for this request
+      abortControllerRef.current = new AbortController();
+
+      // Set timeout that properly cleans up
+      healthCheckTimeoutRef.current = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+      }, 8000); // Increased timeout to 8 seconds
+
+      console.log("Testing backend connection...");
+
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/v1/health`,
+        {
+          method: "GET",
+          signal: abortControllerRef.current.signal,
+          headers: {
+            "Cache-Control": "no-cache",
+            Accept: "application/json",
+          },
+        }
+      );
+
+      // Clear timeout if request completes
+      if (healthCheckTimeoutRef.current) {
+        clearTimeout(healthCheckTimeoutRef.current);
+        healthCheckTimeoutRef.current = null;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "success") {
+          console.log("Backend connection verified:", data);
+          return true;
+        }
+      }
+
+      console.warn("Backend health check failed - invalid response");
+      return false;
+    } catch (error) {
+      // Clear timeout on error
+      if (healthCheckTimeoutRef.current) {
+        clearTimeout(healthCheckTimeoutRef.current);
+        healthCheckTimeoutRef.current = null;
+      }
+
+      if (error.name === "AbortError") {
+        console.log("Health check was cancelled or timed out");
+      } else {
+        console.error("Health check failed:", error.message);
+      }
+      return false;
+    }
+  }, [cleanup]);
 
   // Form persistence effects
   useEffect(() => {
@@ -198,36 +281,50 @@ const Register = () => {
     }
   }, [formData.email, checkEmail, resetEmailStatus]);
 
-  // Test API connection on component mount
+  // Single, improved connection check on mount
   useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        console.log("🔍 Testing backend connection...");
-        const response = await fetch(
-          `${process.env.REACT_APP_API_URL}/api/v1/health`
-        );
-        const data = await response.json();
+    let isMounted = true;
 
-        if (response.ok && data.status === "success") {
-          setConnectionStatus("connected");
-          console.log("✅ Backend connection verified:", data);
-        } else {
-          setConnectionStatus("failed");
-          console.error("❌ Backend health check failed:", data);
+    const performHealthCheck = async () => {
+      if (!isMounted) return;
+
+      setConnectionStatus("checking");
+      const isConnected = await checkServerConnection();
+
+      if (isMounted) {
+        setConnectionStatus(isConnected ? "connected" : "failed");
+
+        // Only retry once if failed
+        if (!isConnected) {
+          retryTimeoutRef.current = setTimeout(async () => {
+            if (isMounted) {
+              console.log("Retrying connection check...");
+              const retryResult = await checkServerConnection();
+              if (isMounted) {
+                setConnectionStatus(retryResult ? "connected" : "failed");
+              }
+            }
+          }, 10000); // Retry after 10 seconds
         }
-      } catch (error) {
-        setConnectionStatus("failed");
-        console.error("❌ Backend connection failed:", error.message);
       }
     };
 
-    checkConnection();
-  }, []);
+    performHealthCheck();
+
+    // Cleanup on unmount
+    return () => {
+      isMounted = false;
+      cleanup();
+    };
+  }, [checkServerConnection, cleanup]);
 
   /**
    * Handle going back to previous page
    */
   const handleGoBack = () => {
+    // Clean up any ongoing requests
+    cleanup();
+
     // Clear any form data if going back
     localStorage.removeItem("registrationForm");
 
@@ -410,7 +507,6 @@ const Register = () => {
    * @param {React.FormEvent} e - Form event
    */
   const handleSubmit = async (e, retryCount = 0) => {
-    // <- ADD retryCount parameter here
     e.preventDefault();
 
     // Don't submit if email exists or is still being checked
@@ -424,15 +520,14 @@ const Register = () => {
     setErrors({});
 
     try {
-      // Test connection first
+      // Test connection first if not already connected
       if (connectionStatus !== "connected") {
         console.log("Testing connection before registration...");
-        const healthResponse = await fetch(
-          `${process.env.REACT_APP_API_URL}/api/v1/health`
-        );
-        if (!healthResponse.ok) {
+        const isConnected = await checkServerConnection();
+        if (!isConnected) {
           throw new Error("Server is not responding");
         }
+        setConnectionStatus("connected");
       }
 
       // Create the registration data object
@@ -511,7 +606,7 @@ const Register = () => {
           console.log(`Retrying registration attempt ${retryCount + 1}/3`);
           setTimeout(
             () => {
-              handleSubmit(e, retryCount + 1); // <- Now retryCount is properly defined
+              handleSubmit(e, retryCount + 1);
             },
             2000 * (retryCount + 1)
           ); // Exponential backoff
@@ -551,7 +646,7 @@ const Register = () => {
         // Likely a network error, offer retry
         setTimeout(
           () => {
-            handleSubmit(e, retryCount + 1); // <- Now retryCount is properly defined
+            handleSubmit(e, retryCount + 1);
           },
           2000 * (retryCount + 1)
         );
@@ -570,67 +665,6 @@ const Register = () => {
       setIsLoading(false);
     }
   };
-
-  // Also add this connection status checker
-  const checkServerConnection = async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/health`,
-        {
-          signal: controller.signal,
-          headers: { "Cache-Control": "no-cache" },
-        }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.status === "success";
-      }
-      return false;
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("Health check timed out");
-      } else {
-        console.log("Health check failed:", error.message);
-      }
-      return false;
-    }
-  };
-
-  // Enhanced connection status effect
-  useEffect(() => {
-    let isMounted = true;
-
-    const checkConnection = async () => {
-      if (!isMounted) return;
-
-      setConnectionStatus(null); // Reset status
-      const isConnected = await checkServerConnection();
-
-      if (isMounted) {
-        setConnectionStatus(isConnected ? "connected" : "failed");
-      }
-    };
-
-    checkConnection();
-
-    // Recheck connection every 30 seconds if failed
-    const interval = setInterval(async () => {
-      if (connectionStatus === "failed") {
-        await checkConnection();
-      }
-    }, 30000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [connectionStatus]);
 
   /**
    * Handle keyboard navigation
@@ -656,20 +690,34 @@ const Register = () => {
     }
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       {/* Connection Status Indicator */}
       {connectionStatus && (
         <div
-          className={`fixed top-4 right-4 z-50 p-3 rounded-lg text-sm max-w-sm ${
+          className={`fixed top-4 right-4 z-50 p-3 rounded-lg text-sm max-w-sm transition-all duration-300 ${
             connectionStatus === "connected"
               ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-700 border border-red-200"
+              : connectionStatus === "checking"
+                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                : "bg-red-50 text-red-700 border border-red-200"
           }`}
         >
-          {connectionStatus === "connected"
-            ? "✅ Connected to server"
-            : "❌ Server connection failed - please refresh and try again"}
+          {connectionStatus === "connected" && "✅ Connected to server"}
+          {connectionStatus === "checking" && (
+            <div className="flex items-center">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Checking server connection...
+            </div>
+          )}
+          {connectionStatus === "failed" && "❌ Server connection failed"}
         </div>
       )}
 
@@ -1036,6 +1084,7 @@ const Register = () => {
                 disabled={
                   isLoading ||
                   connectionStatus === "failed" ||
+                  connectionStatus === "checking" ||
                   emailStatus.isChecking ||
                   emailStatus.exists === true
                 }
@@ -1095,7 +1144,7 @@ const Register = () => {
             <div className="text-sm text-gray-600">
               <h3 className="font-medium text-gray-900">What happens next?</h3>
               <ul className="mt-4 space-y-3 list-disc list-inside">
-                <li>You&apos;ll receive a verification email</li>
+                <li>You'll receive a verification email</li>
                 <li>Complete your profile information</li>
                 <li>Get access to your dashboard</li>
               </ul>
