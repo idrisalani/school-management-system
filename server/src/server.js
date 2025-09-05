@@ -104,7 +104,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://school-management-frontend-flax.vercel.app", // FIXED: Added your frontend URL
+    "https://school-management-frontend-flax.vercel.app",
     "https://school-management-backend-sandy.vercel.app",
     process.env.CLIENT_URL,
     process.env.FRONTEND_URL,
@@ -118,19 +118,29 @@ const corsOptions = {
     "Content-Type",
     "Accept",
     "Authorization",
-    "Cache-Control",
+    "Cache-Control", // ADD THIS
     "X-Access-Token",
+    "X-Requested-With",
+    "Access-Control-Allow-Origin", // ADD THIS
+    "Access-Control-Allow-Headers", // ADD THIS
+    "Access-Control-Allow-Methods", // ADD THIS
   ],
   exposedHeaders: ["Content-Length"],
-  maxAge: 86400, // 24 hours
+  maxAge: 86400,
   preflightContinue: false,
   optionsSuccessStatus: 200,
 };
 
+app.use(cors(corsOptions));
+
+// Update the manual CORS middleware as well
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://school-management-frontend-flax.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, Content-Type, Accept, Authorization, Cache-Control, X-Requested-With, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods"
+  );
   res.header("Access-Control-Allow-Credentials", "true");
 
   if (req.method === "OPTIONS") {
