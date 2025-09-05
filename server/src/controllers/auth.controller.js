@@ -1622,16 +1622,16 @@ export const verifyEmail = async (req, res, next) => {
       throw new ValidationError("Verification token is required");
     }
 
-    logger.info("🔍 Email verification attempt", {
+    logger.info("Email verification attempt", {
       token: token.substring(0, 10) + "...",
       ip: req.ip,
     });
 
     // Verify email token
     const decoded = verifyVerificationToken(token);
-    logger.debug("🎫 Token decoded successfully", { userId: decoded.userId });
+    logger.debug("Token decoded successfully", { userId: decoded.userId });
 
-    // CRITICAL FIX: Include role and profile_completed in the RETURNING clause
+    // CRITICAL FIX 1: Include role in the RETURNING clause
     const result = await query(
       `UPDATE users 
        SET is_verified = true, 
@@ -1653,9 +1653,9 @@ export const verifyEmail = async (req, res, next) => {
         const existingUser = userCheck.rows[0];
 
         if (existingUser.is_verified) {
-          logger.info("📧 Email already verified", { userId: existingUser.id });
+          logger.info("Email already verified", { userId: existingUser.id });
 
-          // Return success response with complete user data including role
+          // CRITICAL FIX 2: Include role in already-verified response
           res.json({
             status: "success",
             message: "Email is already verified",
@@ -1665,7 +1665,7 @@ export const verifyEmail = async (req, res, next) => {
                 email: existingUser.email,
                 first_name: existingUser.first_name,
                 last_name: existingUser.last_name,
-                role: existingUser.role, // ← CRITICAL: Include role
+                role: existingUser.role, // ← FIXED: Include role
                 profile_completed: existingUser.profile_completed,
                 is_verified: true,
               },
@@ -1675,7 +1675,9 @@ export const verifyEmail = async (req, res, next) => {
                 : jwt.sign(
                     {
                       userId: existingUser.id,
-                      role: existingUser.role, // ← CRITICAL: Include role in token
+                      id: existingUser.id,
+                      email: existingUser.email,
+                      role: existingUser.role, // ← FIXED: Include role in token
                       purpose: "profile_completion",
                     },
                     process.env.JWT_SECRET || "your-secret-key",
@@ -1693,8 +1695,8 @@ export const verifyEmail = async (req, res, next) => {
 
     const user = result.rows[0];
 
-    // ENHANCED LOGGING: Show what we got from the database
-    logger.info("✅ User verification data retrieved", {
+    // Enhanced logging to verify role is present
+    logger.info("User verification data retrieved", {
       userId: user.id,
       email: user.email,
       role: user.role, // ← This should now have a value
@@ -1710,54 +1712,29 @@ export const verifyEmail = async (req, res, next) => {
       userAgent: req.get("User-Agent"),
     });
 
-    // Send welcome confirmation email using sendEmail
+    // Send welcome confirmation email (non-blocking)
     setImmediate(async () => {
       try {
         const userName = `${user.first_name} ${user.last_name}`.trim() || "User";
         const loginLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/login`;
-        const dashboardLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard`;
 
         await emailService.sendEmail({
           to: user.email,
           subject: "✅ Email Verified Successfully!",
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
-              <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                <h2 style="color: #059669; margin: 0 0 30px 0; text-align: center;">Email Verified! 🎉</h2>
-                
-                <p>Hi <strong>${userName}</strong>,</p>
-                
-                <p>Your email address has been successfully verified. You can now access all features of the School Management System.</p>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${loginLink}" style="background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-right: 10px;">
-                    Login Now
-                  </a>
-                  <a href="${dashboardLink}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                    Go to Dashboard
-                  </a>
-                </div>
-                
-                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-                <p style="color: #9ca3af; font-size: 14px;">
-                  Best regards,<br>The School Management Team
-                </p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #059669;">Email Verified! 🎉</h2>
+              <p>Hi <strong>${userName}</strong>,</p>
+              <p>Your email address has been successfully verified. You can now access all features of the School Management System.</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${loginLink}" style="background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                  Login Now
+                </a>
               </div>
+              <p>Best regards,<br>The School Management Team</p>
             </div>
           `,
-          text: `
-Email Verified Successfully!
-
-Hi ${userName},
-
-Your email address has been successfully verified. You can now access all features of the School Management System.
-
-Login: ${loginLink}
-Dashboard: ${dashboardLink}
-
-Best regards,
-The School Management Team
-          `,
+          text: `Email Verified Successfully! Hi ${userName}, your email has been verified. Login: ${loginLink}`,
         });
       } catch (emailError) {
         logger.error("Failed to send verification success email", {
@@ -1767,7 +1744,7 @@ The School Management Team
       }
     });
 
-    logger.info("📧 Email verified successfully", {
+    logger.info("Email verified successfully", {
       userId: user.id,
       role: user.role,
       profile_completed: user.profile_completed,
@@ -1775,12 +1752,6 @@ The School Management Team
 
     // Determine next step based on profile completion status
     const isProfileCompleted = user.profile_completed || false;
-
-    logger.info("📋 Profile completion check", {
-      userId: user.id,
-      isProfileCompleted,
-      nextStep: isProfileCompleted ? "login" : "complete_profile",
-    });
 
     if (isProfileCompleted) {
       // Profile already completed - redirect to login
@@ -1793,7 +1764,7 @@ The School Management Team
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
-            role: user.role, // ← CRITICAL: Include role in response
+            role: user.role, // ← FIXED: Include role in response
             profile_completed: user.profile_completed,
             is_verified: true,
             status: user.status,
@@ -1803,20 +1774,20 @@ The School Management Team
         timestamp: new Date().toISOString(),
       });
     } else {
-      // Profile not completed - generate temp token with role and redirect to profile completion
+      // CRITICAL FIX 3: Include role in JWT token payload
       const tempToken = jwt.sign(
         {
           userId: user.id,
-          id: user.id, // ← Include both for compatibility
+          id: user.id, // Include both for compatibility
           email: user.email,
-          role: user.role, // ← CRITICAL: Include role in token
+          role: user.role, // ← FIXED: Include role in token
           purpose: "profile_completion",
         },
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "2h" }
       );
 
-      logger.info("🎫 Generated temp token with role", {
+      logger.info("Generated temp token with role", {
         userId: user.id,
         role: user.role,
         tokenHasRole: true,
@@ -1831,7 +1802,7 @@ The School Management Team
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
-            role: user.role, // ← CRITICAL: Include role in response
+            role: user.role, // ← FIXED: Include role in response
             profile_completed: user.profile_completed,
             is_verified: true,
             status: user.status,
@@ -1843,7 +1814,7 @@ The School Management Team
       });
     }
   } catch (error) {
-    logger.error("💥 Email verification error", {
+    logger.error("Email verification error", {
       error: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
