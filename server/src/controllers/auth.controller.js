@@ -1752,7 +1752,7 @@ The School Management Team
 // ========================= EMAIL VERIFICATION =========================
 
 /**
- * Enhanced email verification - FIXED VERSION
+ * Clean email verification function - Production Version
  * @param {ExpressRequest & AuthRequest} req
  * @param {ExpressResponse} res
  * @param {ExpressNextFunction} next
@@ -1766,16 +1766,10 @@ export const verifyEmail = async (req, res, next) => {
       throw new ValidationError("Verification token is required");
     }
 
-    logger.info("Email verification attempt", {
-      token: token.substring(0, 10) + "...",
-      ip: req.ip,
-    });
-
     // Verify email token
     const decoded = verifyVerificationToken(token);
-    logger.debug("Token decoded successfully", { userId: decoded.userId });
 
-    // CRITICAL FIX 1: Include role in the RETURNING clause
+    // Update user verification status
     const result = await query(
       `UPDATE users 
        SET is_verified = true, 
@@ -1797,9 +1791,6 @@ export const verifyEmail = async (req, res, next) => {
         const existingUser = userCheck.rows[0];
 
         if (existingUser.is_verified) {
-          logger.info("Email already verified", { userId: existingUser.id });
-
-          // CRITICAL FIX 2: Include role in already-verified response
           res.json({
             status: "success",
             message: "Email is already verified",
@@ -1809,7 +1800,7 @@ export const verifyEmail = async (req, res, next) => {
                 email: existingUser.email,
                 first_name: existingUser.first_name,
                 last_name: existingUser.last_name,
-                role: existingUser.role, // ← FIXED: Include role
+                role: existingUser.role,
                 profile_completed: existingUser.profile_completed,
                 is_verified: true,
               },
@@ -1821,7 +1812,7 @@ export const verifyEmail = async (req, res, next) => {
                       userId: existingUser.id,
                       id: existingUser.id,
                       email: existingUser.email,
-                      role: existingUser.role, // ← FIXED: Include role in token
+                      role: existingUser.role,
                       purpose: "profile_completion",
                     },
                     process.env.JWT_SECRET || "your-secret-key",
@@ -1839,15 +1830,7 @@ export const verifyEmail = async (req, res, next) => {
 
     const user = result.rows[0];
 
-    // Enhanced logging to verify role is present
-    logger.info("User verification data retrieved", {
-      userId: user.id,
-      email: user.email,
-      role: user.role, // ← This should now have a value
-      profile_completed: user.profile_completed,
-      hasRole: !!user.role,
-    });
-
+    // Create audit log
     await createAuditLog({
       action: AUDIT_ACTIONS.EMAIL_VERIFIED,
       userId: user.id,
@@ -1864,10 +1847,10 @@ export const verifyEmail = async (req, res, next) => {
 
         await emailService.sendEmail({
           to: user.email,
-          subject: "✅ Email Verified Successfully!",
+          subject: "Email Verified Successfully!",
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #059669;">Email Verified! 🎉</h2>
+              <h2 style="color: #059669;">Email Verified!</h2>
               <p>Hi <strong>${userName}</strong>,</p>
               <p>Your email address has been successfully verified. You can now access all features of the School Management System.</p>
               <div style="text-align: center; margin: 30px 0;">
@@ -1888,12 +1871,6 @@ export const verifyEmail = async (req, res, next) => {
       }
     });
 
-    logger.info("Email verified successfully", {
-      userId: user.id,
-      role: user.role,
-      profile_completed: user.profile_completed,
-    });
-
     // Determine next step based on profile completion status
     const isProfileCompleted = user.profile_completed || false;
 
@@ -1908,7 +1885,7 @@ export const verifyEmail = async (req, res, next) => {
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
-            role: user.role, // ← FIXED: Include role in response
+            role: user.role,
             profile_completed: user.profile_completed,
             is_verified: true,
             status: user.status,
@@ -1918,24 +1895,18 @@ export const verifyEmail = async (req, res, next) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      // CRITICAL FIX 3: Include role in JWT token payload
+      // Generate temp token for profile completion
       const tempToken = jwt.sign(
         {
           userId: user.id,
-          id: user.id, // Include both for compatibility
+          id: user.id,
           email: user.email,
-          role: user.role, // ← FIXED: Include role in token
+          role: user.role,
           purpose: "profile_completion",
         },
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "2h" }
       );
-
-      logger.info("Generated temp token with role", {
-        userId: user.id,
-        role: user.role,
-        tokenHasRole: true,
-      });
 
       res.json({
         status: "success",
@@ -1946,7 +1917,7 @@ export const verifyEmail = async (req, res, next) => {
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
-            role: user.role, // ← FIXED: Include role in response
+            role: user.role,
             profile_completed: user.profile_completed,
             is_verified: true,
             status: user.status,
