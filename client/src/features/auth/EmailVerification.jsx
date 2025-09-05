@@ -1,4 +1,4 @@
-// Email Verification Frontend Component
+// Fixed EmailVerification.jsx - Browser Compatible JWT Decoding
 // @ts-nocheck
 // File: /client/src/features/auth/EmailVerification.jsx
 
@@ -76,21 +76,66 @@ const EmailVerification = () => {
     verifyEmail();
   }, [token]);
 
-  // UPDATE your EmailVerification.jsx handleContinue function with debugging:
+  // BROWSER-COMPATIBLE JWT DECODE FUNCTION
+  const decodeJWT = (token) => {
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        throw new Error("Invalid JWT format");
+      }
+
+      // Browser-compatible base64 decoding
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+
+      // Add padding if needed
+      const paddedBase64 = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+
+      // Decode using browser's atob
+      const jsonPayload = decodeURIComponent(
+        atob(paddedBase64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error("Failed to decode JWT:", error);
+      return null;
+    }
+  };
 
   const handleContinue = () => {
     const { nextStep, user, tempToken } = verificationState;
 
-    // ENHANCED DEBUG LOGGING
-    console.log("🔍 EmailVerification Debug:", {
-      nextStep,
-      hasUser: !!user,
-      hasTempToken: !!tempToken,
-      userProfileCompleted: user?.profile_completed,
-      userRole: user?.role, // ← ADD THIS
-      userObject: user, // ← ADD THIS to see full user object
-      verificationState: verificationState,
-    });
+    // COMPREHENSIVE DEBUG LOGGING
+    console.group("🔍 EmailVerification Debug Analysis");
+    console.log("📍 Verification state:", verificationState);
+    console.log("📍 Next step:", nextStep);
+    console.log("📍 Has user:", !!user);
+    console.log("📍 Has temp token:", !!tempToken);
+
+    if (user) {
+      console.log("👤 User object keys:", Object.keys(user));
+      console.log("👤 Full user object:", user);
+      console.log("👤 User role (direct):", user.role);
+      console.log("👤 User role (snake_case):", user.user_role);
+      console.log(
+        "👤 Profile completed:",
+        user.profile_completed || user.profileCompleted
+      );
+    }
+
+    if (tempToken) {
+      console.log("🎫 Temp token exists:", !!tempToken);
+      const tokenPayload = decodeJWT(tempToken);
+      if (tokenPayload) {
+        console.log("🎫 Token payload:", tokenPayload);
+        console.log("🎫 Token role:", tokenPayload.role);
+      }
+    }
+    console.groupEnd();
 
     if (nextStep === "complete_profile" || nextStep === "complete-profile") {
       // Store temp token in localStorage
@@ -101,54 +146,65 @@ const EmailVerification = () => {
         console.warn("⚠️ No temp token provided for profile completion");
       }
 
-      // ENHANCED: Ensure user object has all required properties
+      // ENHANCED: Build comprehensive user object
       const userDataForProfile = {
-        id: user?.id,
+        id: user?.id || user?.user_id,
         email: user?.email,
-        firstName: user?.firstName || user?.first_name,
-        lastName: user?.lastName || user?.last_name,
-        role: user?.role, // ← This is critical
-        isVerified: user?.isVerified || user?.is_verified,
+        firstName: user?.firstName || user?.first_name || user?.fname,
+        lastName: user?.lastName || user?.last_name || user?.lname,
+        role: user?.role || user?.user_role,
+        isVerified:
+          user?.isVerified || user?.is_verified || user?.email_verified,
         profileCompleted: user?.profileCompleted || user?.profile_completed,
       };
 
-      // DEBUG: Log what we're actually passing
-      console.log(
-        "👤 User data being passed to ProfileCompletion:",
-        userDataForProfile
-      );
+      // DEBUG: Log what we're building
+      console.log("👤 Building user data:", userDataForProfile);
 
-      // Check if role is missing and handle it
-      if (!userDataForProfile.role) {
-        console.error("❌ CRITICAL: User role is missing!");
-        console.log("Available user properties:", Object.keys(user || {}));
-
-        // Try to get role from tempToken as fallback
-        if (tempToken) {
-          try {
-            const parts = tempToken.split(".");
-            if (parts.length === 3) {
-              const payload = JSON.parse(
-                Buffer.from(parts[1], "base64").toString("utf8")
-              );
-              userDataForProfile.role = payload.role;
-              console.log("🔧 Role retrieved from token:", payload.role);
-            }
-          } catch (error) {
-            console.error("Failed to decode role from token:", error);
-          }
+      // If role is missing, try to extract from token
+      if (!userDataForProfile.role && tempToken) {
+        console.log("🔧 Role missing, attempting to extract from token...");
+        const tokenPayload = decodeJWT(tempToken);
+        if (tokenPayload && tokenPayload.role) {
+          userDataForProfile.role = tokenPayload.role;
+          console.log("🔧 Role extracted from token:", tokenPayload.role);
+        } else {
+          console.error("❌ Failed to extract role from token");
         }
       }
 
+      // Final validation
+      console.group("🚀 Navigation Preparation");
+      console.log(
+        "📋 Final user data for ProfileCompletion:",
+        userDataForProfile
+      );
+      console.log("📋 Has role:", !!userDataForProfile.role);
+      console.log("📋 Role value:", userDataForProfile.role);
+
+      if (!userDataForProfile.role) {
+        console.error("❌ CRITICAL ERROR: No role found anywhere!");
+        console.error(
+          "This suggests a backend issue - check your email verification endpoint"
+        );
+      }
+      console.groupEnd();
+
       // Navigate to profile completion with enhanced user data
       navigate("/complete-profile", {
-        state: { user: userDataForProfile },
+        state: {
+          user: userDataForProfile,
+          fromEmailVerification: true,
+          debugInfo: {
+            originalUser: user,
+            tempToken: !!tempToken,
+            timestamp: new Date().toISOString(),
+          },
+        },
         replace: true,
       });
-      console.log(
-        "🚀 Navigating to profile completion with role:",
-        userDataForProfile.role
-      );
+
+      console.log("🚀 Navigation completed to /complete-profile");
     } else if (nextStep === "login") {
       console.log("🔄 Redirecting to login");
       navigate("/login", { replace: true });
@@ -197,6 +253,26 @@ const EmailVerification = () => {
               Welcome {verificationState.user?.first_name}!{" "}
               {verificationState.message}
             </p>
+
+            {/* DEBUG PANEL - Remove in production */}
+            <div
+              style={{
+                background: "#f0f0f0",
+                padding: "10px",
+                margin: "10px 0",
+                fontSize: "12px",
+                border: "1px solid #ccc",
+                textAlign: "left",
+              }}
+            >
+              <strong>Debug Info:</strong>
+              <div>Next Step: {verificationState.nextStep}</div>
+              <div>Has User: {verificationState.user ? "Yes" : "No"}</div>
+              <div>
+                User Role: {verificationState.user?.role || "Not found"}
+              </div>
+              <div>Has Token: {verificationState.tempToken ? "Yes" : "No"}</div>
+            </div>
 
             {verificationState.nextStep === "complete_profile" && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
