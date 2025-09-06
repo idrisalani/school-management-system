@@ -2,7 +2,7 @@
 
 // ENHANCED: components/analytics/AnalyticsDashboard.jsx
 import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import AcademicPerformance from "./AcademicPerformance";
 import AttendanceAnalytics from "./AttendanceAnalytics";
 import FinancialMetrics from "./FinancialMetrics";
