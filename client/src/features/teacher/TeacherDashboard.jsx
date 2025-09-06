@@ -391,7 +391,7 @@ const TeacherDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header with Logout */}
       <div className="bg-white shadow-sm border-b px-6 py-4 mb-8">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               Teacher Dashboard
