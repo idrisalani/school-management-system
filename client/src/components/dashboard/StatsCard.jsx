@@ -2,7 +2,7 @@
 
 // ENHANCED: components/dashboard/StatsCard.jsx
 import React, { useState } from "react";
-import { Card, CardContent } from "../../components/ui/card";
+import { Card, CardContent } from "../ui/card";
 import {
   TrendingUp,
   TrendingDown,
@@ -14,7 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "../ui/dropdown-menu";
 
 const StatsCard = ({
   title,
