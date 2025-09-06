@@ -1,5 +1,5 @@
 // @ts-nocheck
-// client/src/features/student/StudentDashboard.jsx - Updated with Real Data and Fixed Layout
+// client/src/features/student/StudentDashboard.jsx - Enhanced with Navigation to Profile/Settings
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
@@ -7,6 +7,7 @@ import {
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
 import DashboardOverview from "../../components/dashboard/DashboardOverview";
+import StudentProfile from "./StudentProfile"; // Import the profile component
 
 // SVG Icon Components
 const Icons = {
@@ -70,6 +71,53 @@ const Icons = {
       />
     </svg>
   ),
+  // NEW ICONS for navigation
+  User: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+      />
+    </svg>
+  ),
+  Settings: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  ),
+  Home: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+      />
+    </svg>
+  ),
+  ChevronDown: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 9l-7 7-7-7"
+      />
+    </svg>
+  ),
 };
 
 // Simple Card components
@@ -91,7 +139,185 @@ const CardContent = ({ children, className = "" }) => (
   <div className={`px-4 py-5 ${className}`}>{children}</div>
 );
 
-// Simple placeholder components with text icons
+// NEW: Navigation Tab Component
+const TabNavigation = ({ activeTab, setActiveTab }) => {
+  const tabs = [
+    {
+      id: "dashboard",
+      name: "Dashboard",
+      icon: Icons.Home,
+    },
+    {
+      id: "profile",
+      name: "Profile & Settings",
+      icon: Icons.User,
+    },
+  ];
+
+  return (
+    <div className="border-b border-gray-200 mb-6">
+      <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm transition-colors
+              ${
+                activeTab === tab.id
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }
+            `}
+          >
+            <tab.icon
+              className={`
+                -ml-0.5 mr-2 h-5 w-5 transition-colors
+                ${
+                  activeTab === tab.id
+                    ? "text-blue-500"
+                    : "text-gray-400 group-hover:text-gray-500"
+                }
+              `}
+            />
+            <span>{tab.name}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+};
+
+// NEW: User Menu Dropdown Component
+const UserMenuDropdown = ({
+  isOpen,
+  setIsOpen,
+  user,
+  onProfileClick,
+  onLogout,
+  isLoggingOut,
+}) => {
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [setIsOpen]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+          <Icons.User className="h-5 w-5 text-blue-600" />
+        </div>
+        <div className="hidden sm:block text-left">
+          <p className="text-sm font-medium text-gray-900">
+            {getUserDisplayName(user)}
+          </p>
+          <p className="text-xs text-gray-500">{user?.email}</p>
+        </div>
+        <Icons.ChevronDown
+          className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+          <div className="py-1">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-900">
+                {getUserDisplayName(user)}
+              </p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
+            </div>
+
+            <button
+              onClick={() => {
+                onProfileClick();
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            >
+              <Icons.User className="h-4 w-4 mr-3" />
+              Profile & Settings
+            </button>
+
+            <button
+              onClick={() => {
+                onLogout();
+                setIsOpen(false);
+              }}
+              disabled={isLoggingOut}
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center disabled:opacity-50"
+            >
+              <Icons.Settings className="h-4 w-4 mr-3" />
+              {isLoggingOut ? "Logging out..." : "Logout"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// NEW: Quick Settings Card Component
+const QuickSettingsCard = ({ onProfileClick }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center space-x-2">
+        <Icons.Settings className="h-5 w-5" />
+        <span>Quick Settings</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-3">
+        <button
+          onClick={onProfileClick}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Icons.User className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Profile Settings</p>
+              <p className="text-sm text-gray-500">
+                Update your personal information
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+
+        <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Icons.Bell className="h-4 w-4 text-green-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Notifications</p>
+              <p className="text-sm text-gray-500">
+                Manage notification preferences
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Existing components (GradesChart, AttendanceOverview, etc.) remain the same...
 const GradesChart = () => (
   <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
     <div className="text-center">
@@ -240,6 +466,10 @@ const StudentDashboard = () => {
   const isLoggingOutRef = useRef(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // NEW: Navigation state
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
   // State for real data
   const [dashboardData, setDashboardData] = useState({
     attendance: "0%",
@@ -254,17 +484,14 @@ const StudentDashboard = () => {
     async (e) => {
       e?.preventDefault();
 
-      // Prevent multiple logout attempts
       if (isLoggingOutRef.current || isLoggingOut) {
         console.log("Logout blocked - already in progress");
         return;
       }
 
-      // Set flags immediately
       isLoggingOutRef.current = true;
       setIsLoggingOut(true);
 
-      // Disable button immediately
       if (logoutButtonRef.current) {
         logoutButtonRef.current.disabled = true;
         logoutButtonRef.current.textContent = "Logging out...";
@@ -272,11 +499,9 @@ const StudentDashboard = () => {
 
       try {
         await logout();
-        // Force immediate redirect without React Router
         window.location.href = "/login";
       } catch (error) {
         console.error("Logout failed:", error);
-        // Reset on error
         setIsLoggingOut(false);
         isLoggingOutRef.current = false;
 
@@ -288,6 +513,11 @@ const StudentDashboard = () => {
     },
     [logout, isLoggingOut]
   );
+
+  // NEW: Profile navigation handler
+  const handleProfileClick = () => {
+    setActiveTab("profile");
+  };
 
   // Fetch student dashboard data
   useEffect(() => {
@@ -304,7 +534,6 @@ const StudentDashboard = () => {
         console.error("Failed to fetch student dashboard data:", error);
         setError("Failed to load student data. Please check your connection.");
 
-        // Fallback data
         setDashboardData({
           attendance: "92%",
           averageGrade: "A-",
@@ -393,11 +622,11 @@ const StudentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with Logout */}
-      <div className="bg-white shadow-sm border-b px-6 py-4 mb-8">
+      {/* ENHANCED Header with User Menu */}
+      <div className="bg-white shadow-sm border-b px-4 sm:px-6 py-4 mb-8">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Student Dashboard
             </h1>
             <p className="text-gray-600 mt-1">
@@ -409,19 +638,25 @@ const StudentDashboard = () => {
               </p>
             )}
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="text-sm font-medium text-gray-900">
-                {getUserDisplayName(user)}
-              </p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
+
+          {/* NEW: Enhanced User Menu */}
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+            <UserMenuDropdown
+              isOpen={isUserMenuOpen}
+              setIsOpen={setIsUserMenuOpen}
+              user={user}
+              onProfileClick={handleProfileClick}
+              onLogout={handleLogout}
+              isLoggingOut={isLoggingOut}
+            />
+
+            {/* Mobile logout button for backup */}
             <button
               ref={logoutButtonRef}
               onClick={handleLogout}
               disabled={isLoggingOut}
               className={`
-                px-4 py-2 text-sm font-medium text-white rounded-lg 
+                sm:hidden w-full px-4 py-2 text-sm font-medium text-white rounded-lg 
                 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
                 ${
                   isLoggingOut
@@ -429,10 +664,6 @@ const StudentDashboard = () => {
                     : "bg-red-600 hover:bg-red-700"
                 }
               `}
-              style={{
-                userSelect: "none",
-                touchAction: "manipulation",
-              }}
             >
               {isLoggingOut ? "Logging out..." : "Logout"}
             </button>
@@ -440,157 +671,179 @@ const StudentDashboard = () => {
         </div>
       </div>
 
-      {/* FIXED: Moved DashboardOverview into the main content area with proper spacing */}
-      <div className="p-6">
-        {/* Enhanced Dashboard Overview Component - Now properly positioned */}
-        <div className="mb-8">
-          <DashboardOverview userRole={user?.role} userId={user?.id} />
-        </div>
+      {/* NEW: Tab Navigation */}
+      <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        {/* Quick Stats - Now with real data */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => {
-            const IconComponent = stat.IconComponent;
-            return (
-              <Card key={index}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className={`p-2 rounded-lg bg-${stat.color}-100`}>
-                      <IconComponent
-                        className={`h-6 w-6 text-${stat.color}-600`}
-                      />
+      {/* Tab Content */}
+      <div className="px-6">
+        {activeTab === "dashboard" && (
+          <>
+            {/* Enhanced Dashboard Overview Component */}
+            <div className="mb-8">
+              <DashboardOverview userRole={user?.role} userId={user?.id} />
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {quickStats.map((stat, index) => {
+                const IconComponent = stat.IconComponent;
+                return (
+                  <Card key={index}>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className={`p-2 rounded-lg bg-${stat.color}-100`}>
+                          <IconComponent
+                            className={`h-6 w-6 text-${stat.color}-600`}
+                          />
+                        </div>
+                        <div
+                          className={`flex items-center space-x-1 text-sm ${
+                            stat.trend === "up"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          <span>{stat.trendValue}</span>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <h3 className="text-sm font-medium text-gray-500">
+                          {stat.title}
+                        </h3>
+                        <p className="mt-2 text-3xl font-semibold">
+                          {stat.value}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>🏆</span>
+                    <span>Grade Performance</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <GradesChart />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>🕒</span>
+                    <span>Attendance Overview</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AttendanceOverview
+                    attendancePercentage={dashboardData.attendance}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Lower Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Upcoming Assignments */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <span>📄</span>
+                      <span>Upcoming Assignments</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <UpcomingAssignments />
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Notifications */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span>🔔</span>
+                      <span>Notifications</span>
                     </div>
-                    <div
-                      className={`flex items-center space-x-1 text-sm ${
-                        stat.trend === "up" ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      <span>{stat.trendValue}</span>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <h3 className="text-sm font-medium text-gray-500">
-                      {stat.title}
-                    </h3>
-                    <p className="mt-2 text-3xl font-semibold">{stat.value}</p>
+                    <span className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded-full">
+                      {notifications.length} new
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`flex items-start space-x-3 p-3 rounded-lg ${
+                          notification.priority === "high"
+                            ? "bg-red-50"
+                            : "bg-gray-50"
+                        }`}
+                      >
+                        <span className="text-red-500">
+                          {notification.priority === "high" ? "⚠️" : "🔔"}
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            {notification.message}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {notification.time}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
+            </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Grades Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <span>🏆</span>
-                <span>Grade Performance</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <GradesChart />
-            </CardContent>
-          </Card>
-
-          {/* Attendance Overview - Now with real data */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <span>🕒</span>
-                <span>Attendance Overview</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AttendanceOverview
-                attendancePercentage={dashboardData.attendance}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lower Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Upcoming Assignments */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <span>📄</span>
-                  <span>Upcoming Assignments</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <UpcomingAssignments />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span>🔔</span>
-                  <span>Notifications</span>
-                </div>
-                <span className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded-full">
-                  {notifications.length} new
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`flex items-start space-x-3 p-3 rounded-lg ${
-                      notification.priority === "high"
-                        ? "bg-red-50"
-                        : "bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-red-500">
-                      {notification.priority === "high" ? "⚠️" : "🔔"}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {notification.time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+            {/* Timetable and Quick Settings */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <span>📅</span>
+                      <span>Today's Schedule</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <TimeTable />
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* Timetable */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <span>📅</span>
-              <span>Today's Schedule</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TimeTable />
-          </CardContent>
-        </Card>
+              {/* NEW: Quick Settings Card */}
+              <QuickSettingsCard onProfileClick={handleProfileClick} />
+            </div>
 
-        {/* Data Source Indicator */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-gray-500">
-            {isLoading
-              ? "Loading from database..."
-              : `Data last updated: ${new Date().toLocaleString()}`}
-          </p>
-        </div>
+            {/* Data Source Indicator */}
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-500">
+                {isLoading
+                  ? "Loading from database..."
+                  : `Data last updated: ${new Date().toLocaleString()}`}
+              </p>
+            </div>
+          </>
+        )}
+
+        {activeTab === "profile" && (
+          <div className="space-y-8">
+            <StudentProfile />
+          </div>
+        )}
       </div>
     </div>
   );

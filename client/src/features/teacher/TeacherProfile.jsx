@@ -1,8 +1,7 @@
 // @ts-nocheck
-
-// client/src/features/student/StudentProfile.jsx - Enhanced Production Version
+// client/src/features/teacher/TeacherProfile.jsx
 import React, { useState, useEffect } from "react";
-import { Edit, Camera, Save, X, Download, User } from "lucide-react";
+import { Edit, Camera, Save, X, Download, GraduationCap } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   Card,
@@ -11,7 +10,7 @@ import {
   CardContent,
 } from "../../components/ui/card";
 
-const StudentProfile = () => {
+const TeacherProfile = () => {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,23 +19,27 @@ const StudentProfile = () => {
 
   const [profileData, setProfileData] = useState({
     name: "",
-    studentId: "",
+    teacherId: "",
     email: "",
     phone: "",
     address: "",
-    grade: "",
-    section: "",
-    guardianName: "",
-    guardianPhone: "",
-    bloodGroup: "",
-    dateOfBirth: "",
-    enrollmentDate: "",
+    department: "",
+    subjects: [],
+    qualifications: "",
+    experience: "",
+    emergencyContact: "",
+    joinDate: "",
     // Settings
     notifications: {
-      grades: true,
       assignments: true,
+      grades: true,
       attendance: false,
       announcements: true,
+    },
+    classPreferences: {
+      autoGrade: false,
+      lateSubmissions: true,
+      emailParents: true,
     },
   });
 
@@ -47,7 +50,9 @@ const StudentProfile = () => {
         ...prev,
         name: user.name || "",
         email: user.email || "",
-        studentId: user.studentId || "ST" + user.id,
+        teacherId: user.teacherId || "TCH" + user.id,
+        department: user.department || "",
+        subjects: user.subjects || [],
       }));
     }
   }, [user]);
@@ -58,7 +63,7 @@ const StudentProfile = () => {
 
     try {
       // TODO: Replace with actual API call
-      // await updateStudentProfile(user.id, profileData);
+      // await updateTeacherProfile(user.id, profileData);
 
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -93,6 +98,40 @@ const StudentProfile = () => {
     }));
   };
 
+  const handleClassPreferenceChange = (type) => {
+    setProfileData((prev) => ({
+      ...prev,
+      classPreferences: {
+        ...prev.classPreferences,
+        [type]: !prev.classPreferences[type],
+      },
+    }));
+  };
+
+  const handleSubjectChange = (index, value) => {
+    const newSubjects = [...profileData.subjects];
+    newSubjects[index] = value;
+    setProfileData((prev) => ({
+      ...prev,
+      subjects: newSubjects,
+    }));
+  };
+
+  const addSubject = () => {
+    setProfileData((prev) => ({
+      ...prev,
+      subjects: [...prev.subjects, ""],
+    }));
+  };
+
+  const removeSubject = (index) => {
+    const newSubjects = profileData.subjects.filter((_, i) => i !== index);
+    setProfileData((prev) => ({
+      ...prev,
+      subjects: newSubjects,
+    }));
+  };
+
   const handleExport = () => {
     // Create and download profile data as JSON
     const dataStr = JSON.stringify(profileData, null, 2);
@@ -101,7 +140,7 @@ const StudentProfile = () => {
 
     const link = document.createElement("a");
     link.href = url;
-    link.download = `student-profile-${profileData.studentId}.json`;
+    link.download = `teacher-profile-${profileData.teacherId}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -129,14 +168,14 @@ const StudentProfile = () => {
           <div className="flex flex-col md:flex-row items-center gap-6">
             {/* Avatar */}
             <div className="relative">
-              <div className="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">
+              <div className="h-24 w-24 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-2xl font-bold">
                 {profileData.name ? (
                   profileData.name
                     .split(" ")
                     .map((n) => n[0])
                     .join("")
                 ) : (
-                  <User size={32} />
+                  <GraduationCap size={32} />
                 )}
               </div>
               {isEditing && (
@@ -149,22 +188,20 @@ const StudentProfile = () => {
             {/* Basic Info */}
             <div className="flex-1 text-center md:text-left">
               <h2 className="text-2xl font-bold text-gray-900">
-                {profileData.name || "Student Profile"}
+                {profileData.name || "Teacher Profile"}
               </h2>
               <p className="text-gray-500">
-                Student ID: {profileData.studentId || "Not assigned"}
+                Teacher ID: {profileData.teacherId || "Not assigned"}
               </p>
               <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-2">
-                {profileData.grade && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    Grade {profileData.grade}
+                {profileData.department && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {profileData.department}
                   </span>
                 )}
-                {profileData.section && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    Section {profileData.section}
-                  </span>
-                )}
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {profileData.subjects.length} Subjects
+                </span>
               </div>
             </div>
 
@@ -175,7 +212,7 @@ const StudentProfile = () => {
                   <button
                     onClick={handleSave}
                     disabled={isLoading}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
                     <Save size={16} className="mr-2" />
                     {isLoading ? "Saving..." : "Save"}
@@ -236,52 +273,6 @@ const StudentProfile = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Date of Birth
-                </label>
-                <input
-                  type="date"
-                  name="dateOfBirth"
-                  value={profileData.dateOfBirth}
-                  onChange={handleChange}
-                  disabled={!isEditing}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Blood Group
-                </label>
-                <select
-                  name="bloodGroup"
-                  value={profileData.bloodGroup}
-                  onChange={handleChange}
-                  disabled={!isEditing}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
-                >
-                  <option value="">Select Blood Group</option>
-                  <option value="A+">A+</option>
-                  <option value="A-">A-</option>
-                  <option value="B+">B+</option>
-                  <option value="B-">B-</option>
-                  <option value="AB+">AB+</option>
-                  <option value="AB-">AB-</option>
-                  <option value="O+">O+</option>
-                  <option value="O-">O-</option>
-                </select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Contact Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
                   Email Address
                 </label>
                 <input
@@ -323,59 +314,96 @@ const StudentProfile = () => {
           </CardContent>
         </Card>
 
-        {/* Academic Information */}
+        {/* Professional Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Academic Information</CardTitle>
+            <CardTitle>Professional Information</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Grade
+                  Department
                 </label>
                 <select
-                  name="grade"
-                  value={profileData.grade}
+                  name="department"
+                  value={profileData.department}
                   onChange={handleChange}
                   disabled={!isEditing}
                   className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
                 >
-                  <option value="">Select Grade</option>
-                  {[...Array(12)].map((_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      Grade {i + 1}
-                    </option>
-                  ))}
+                  <option value="">Select Department</option>
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="Science">Science</option>
+                  <option value="English">English</option>
+                  <option value="History">History</option>
+                  <option value="Physical Education">Physical Education</option>
+                  <option value="Art">Art</option>
+                  <option value="Music">Music</option>
+                  <option value="Computer Science">Computer Science</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Subjects Teaching
+                </label>
+                <div className="space-y-2">
+                  {profileData.subjects.map((subject, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={subject}
+                        onChange={(e) =>
+                          handleSubjectChange(index, e.target.value)
+                        }
+                        disabled={!isEditing}
+                        placeholder={`Subject ${index + 1}`}
+                        className="flex-1 rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
+                      />
+                      {isEditing && (
+                        <button
+                          onClick={() => removeSubject(index)}
+                          className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {isEditing && (
+                    <button
+                      onClick={addSubject}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      + Add Subject
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Section
+                  Years of Experience
                 </label>
-                <select
-                  name="section"
-                  value={profileData.section}
+                <input
+                  type="number"
+                  name="experience"
+                  value={profileData.experience}
                   onChange={handleChange}
                   disabled={!isEditing}
                   className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
-                >
-                  <option value="">Select Section</option>
-                  {["A", "B", "C", "D", "E"].map((section) => (
-                    <option key={section} value={section}>
-                      Section {section}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Enrollment Date
+                  Join Date
                 </label>
                 <input
                   type="date"
-                  name="enrollmentDate"
-                  value={profileData.enrollmentDate}
+                  name="joinDate"
+                  value={profileData.joinDate}
                   onChange={handleChange}
                   disabled={!isEditing}
                   className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
@@ -385,46 +413,59 @@ const StudentProfile = () => {
           </CardContent>
         </Card>
 
-        {/* Guardian Information & Notification Settings */}
+        {/* Qualifications & Emergency Contact */}
         <Card>
           <CardHeader>
-            <CardTitle>Guardian & Settings</CardTitle>
+            <CardTitle>Qualifications & Emergency Contact</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Guardian Name
+                  Qualifications
                 </label>
-                <input
-                  type="text"
-                  name="guardianName"
-                  value={profileData.guardianName}
+                <textarea
+                  name="qualifications"
+                  value={profileData.qualifications}
                   onChange={handleChange}
                   disabled={!isEditing}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Guardian Phone
-                </label>
-                <input
-                  type="tel"
-                  name="guardianPhone"
-                  value={profileData.guardianPhone}
-                  onChange={handleChange}
-                  disabled={!isEditing}
+                  rows={4}
+                  placeholder="List your degrees, certifications, and qualifications..."
                   className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Emergency Contact
+                </label>
+                <textarea
+                  name="emergencyContact"
+                  value={profileData.emergencyContact}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  rows={2}
+                  placeholder="Name and phone number"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 py-2 px-3 disabled:bg-gray-50"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Settings & Preferences */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Teaching Preferences & Notifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
               {/* Notification Preferences */}
-              <div className="pt-4 border-t border-gray-200">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Email Notifications
                 </label>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {Object.entries(profileData.notifications).map(
                     ([key, value]) => (
                       <label key={key} className="flex items-center">
@@ -443,6 +484,36 @@ const StudentProfile = () => {
                   )}
                 </div>
               </div>
+
+              {/* Class Preferences */}
+              <div className="pt-4 border-t border-gray-200">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Class Management Preferences
+                </label>
+                <div className="space-y-3">
+                  {Object.entries(profileData.classPreferences).map(
+                    ([key, value]) => (
+                      <label key={key} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={value}
+                          onChange={() => handleClassPreferenceChange(key)}
+                          disabled={!isEditing}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="ml-2 text-sm text-gray-600">
+                          {key === "autoGrade" &&
+                            "Auto-grade multiple choice questions"}
+                          {key === "lateSubmissions" &&
+                            "Accept late submissions"}
+                          {key === "emailParents" &&
+                            "Email parents about grades"}
+                        </span>
+                      </label>
+                    )
+                  )}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -451,4 +522,4 @@ const StudentProfile = () => {
   );
 };
 
-export default StudentProfile;
+export default TeacherProfile;

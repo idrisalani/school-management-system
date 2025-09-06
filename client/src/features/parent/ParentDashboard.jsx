@@ -1,12 +1,14 @@
 // @ts-nocheck
-// client/src/features/parent/ParentDashboard.jsx - Updated with Real Data
+// client/src/features/parent/ParentDashboard.jsx - Complete Production Ready Version
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
   getParentDashboardData,
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
 import DashboardOverview from "../../components/dashboard/DashboardOverview";
+import ParentProfile from "./ParentProfile";
 
 // SVG Icon Components
 const Icons = {
@@ -46,7 +48,7 @@ const Icons = {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 003.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
       />
     </svg>
   ),
@@ -60,26 +62,6 @@ const Icons = {
       />
     </svg>
   ),
-  Book: ({ className = "h-6 w-6", color = "currentColor" }) => (
-    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-      />
-    </svg>
-  ),
-  FileText: ({ className = "h-6 w-6", color = "currentColor" }) => (
-    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-  ),
   Mail: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
       <path
@@ -87,6 +69,26 @@ const Icons = {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      />
+    </svg>
+  ),
+  AlertTriangle: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      />
+    </svg>
+  ),
+  User: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
       />
     </svg>
   ),
@@ -106,59 +108,265 @@ const Icons = {
       />
     </svg>
   ),
-  Edit: ({ className = "h-6 w-6", color = "currentColor" }) => (
+  Home: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
       />
     </svg>
   ),
-  CreditCard: ({ className = "h-6 w-6", color = "currentColor" }) => (
+  ChevronDown: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+        d="M19 9l-7 7-7-7"
       />
     </svg>
   ),
-  ClipboardList: ({ className = "h-6 w-6", color = "currentColor" }) => (
+  Heart: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
       />
     </svg>
   ),
-  Student: ({ className = "h-6 w-6", color = "currentColor" }) => (
+  Bell: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-      />
-    </svg>
-  ),
-  AlertTriangle: ({ className = "h-6 w-6", color = "currentColor" }) => (
-    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
       />
     </svg>
   ),
 };
 
-// Updated StatCard with proper SVG icons
+// Card components
+const Card = ({ children, className = "" }) => (
+  <div className={`bg-white shadow rounded-lg ${className}`}>{children}</div>
+);
+
+const CardHeader = ({ children }) => (
+  <div className="px-4 py-5 border-b border-gray-200">{children}</div>
+);
+
+const CardTitle = ({ children, className = "" }) => (
+  <h3 className={`text-lg leading-6 font-medium text-gray-900 ${className}`}>
+    {children}
+  </h3>
+);
+
+const CardContent = ({ children, className = "" }) => (
+  <div className={`px-4 py-5 ${className}`}>{children}</div>
+);
+
+// Tab Navigation Component
+const TabNavigation = ({ activeTab, setActiveTab }) => {
+  const tabs = [
+    {
+      id: "dashboard",
+      name: "Parent Dashboard",
+      icon: Icons.Home,
+    },
+    {
+      id: "profile",
+      name: "Profile & Settings",
+      icon: Icons.User,
+    },
+  ];
+
+  return (
+    <div className="border-b border-gray-200 mb-6">
+      <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm transition-colors
+              ${
+                activeTab === tab.id
+                  ? "border-purple-500 text-purple-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }
+            `}
+          >
+            <tab.icon
+              className={`
+                -ml-0.5 mr-2 h-5 w-5 transition-colors
+                ${
+                  activeTab === tab.id
+                    ? "text-purple-500"
+                    : "text-gray-400 group-hover:text-gray-500"
+                }
+              `}
+            />
+            <span>{tab.name}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+};
+
+// User Menu Dropdown Component
+const UserMenuDropdown = ({
+  isOpen,
+  setIsOpen,
+  user,
+  onProfileClick,
+  onLogout,
+  isLoggingOut,
+}) => {
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [setIsOpen]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
+          <Icons.Heart className="h-5 w-5 text-purple-600" />
+        </div>
+        <div className="hidden sm:block text-left">
+          <p className="text-sm font-medium text-gray-900">
+            {getUserDisplayName(user)}
+          </p>
+          <p className="text-xs text-gray-500">{user?.email}</p>
+        </div>
+        <Icons.ChevronDown
+          className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+          <div className="py-1">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-900">
+                {getUserDisplayName(user)}
+              </p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-xs text-purple-600 font-medium">Parent</p>
+            </div>
+
+            <button
+              onClick={() => {
+                onProfileClick();
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            >
+              <Icons.User className="h-4 w-4 mr-3" />
+              Profile & Settings
+            </button>
+
+            <button
+              onClick={() => {
+                onLogout();
+                setIsOpen(false);
+              }}
+              disabled={isLoggingOut}
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center disabled:opacity-50"
+            >
+              <Icons.Settings className="h-4 w-4 mr-3" />
+              {isLoggingOut ? "Logging out..." : "Logout"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Quick Settings Card Component
+const QuickSettingsCard = ({ onProfileClick, onChildrenClick }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center space-x-2">
+        <Icons.Settings className="h-5 w-5" />
+        <span>Parent Tools</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-3">
+        <button
+          onClick={onProfileClick}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Icons.User className="h-4 w-4 text-purple-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Profile Settings</p>
+              <p className="text-sm text-gray-500">
+                Update your contact information
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+
+        <button
+          onClick={onChildrenClick}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Icons.UserGroup className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Children Management</p>
+              <p className="text-sm text-gray-500">
+                View your children's progress
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+
+        <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Icons.Bell className="h-4 w-4 text-orange-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Notifications</p>
+              <p className="text-sm text-gray-500">
+                Manage communication preferences
+              </p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Stats Card Component
 const StatCard = ({
   title,
   value,
@@ -185,7 +393,7 @@ const StatCard = ({
     <div
       onClick={onClick}
       className={`bg-white rounded-lg shadow-sm border p-6 transition-all duration-200 ${
-        onClick ? "hover:shadow-md hover:border-blue-300 cursor-pointer" : ""
+        onClick ? "hover:shadow-md hover:border-purple-300 cursor-pointer" : ""
       }`}
     >
       <div className="flex items-center">
@@ -202,135 +410,16 @@ const StatCard = ({
   );
 };
 
-const ChildCard = ({
-  name,
-  grade,
-  status,
-  statusColor,
-  recentGrade,
-  onClick,
-}) => (
-  <div
-    onClick={onClick}
-    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-  >
-    <div className="flex items-center">
-      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-        <Icons.Student className="h-5 w-5 text-blue-600" />
-      </div>
-      <div className="ml-3">
-        <p className="font-medium text-gray-900">{name}</p>
-        <p className="text-sm text-gray-600">{grade}</p>
-      </div>
-    </div>
-    <div className="text-right">
-      <span
-        className={`text-sm font-medium ${
-          statusColor === "green" ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        {status}
-      </span>
-      <p className="text-sm text-gray-500">Recent: {recentGrade}</p>
-    </div>
-  </div>
-);
-
-const ActivityItem = ({ type, message, time }) => {
-  const getIcon = (type) => {
-    switch (type) {
-      case "grade":
-        return Icons.Award;
-      case "attendance":
-        return Icons.Clock;
-      case "assignment":
-        return Icons.FileText;
-      default:
-        return Icons.Bell;
-    }
-  };
-
-  const IconComponent = getIcon(type);
-
-  return (
-    <div className="flex items-start space-x-3">
-      <div className="bg-blue-50 p-2 rounded-lg">
-        <IconComponent className="h-4 w-4 text-blue-600" />
-      </div>
-      <div className="flex-1">
-        <p className="text-sm text-gray-900">{message}</p>
-        <p className="text-xs text-gray-500">{time}</p>
-      </div>
-    </div>
-  );
-};
-
-const EventItem = ({ title, date, type }) => (
-  <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-    <div>
-      <p className="font-medium text-gray-900">{title}</p>
-      <p className="text-sm text-gray-600">{date}</p>
-    </div>
-    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-      {type}
-    </span>
-  </div>
-);
-
-const ActionButton = ({ title, IconComponent, onClick }) => (
-  <button
-    onClick={onClick}
-    className="flex flex-col items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all duration-200"
-  >
-    <div className="p-2 bg-gray-100 rounded-lg mb-2">
-      <IconComponent className="h-5 w-5 text-gray-600" />
-    </div>
-    <span className="text-sm font-medium text-gray-900">{title}</span>
-  </button>
-);
-
-const QuickNavButton = ({ label, IconComponent, onClick }) => (
-  <button
-    onClick={onClick}
-    className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors"
-  >
-    <div className="mr-2 p-1 bg-blue-100 rounded">
-      <IconComponent className="h-4 w-4 text-blue-600" />
-    </div>
-    {label}
-  </button>
-);
-
-const ResourceCard = ({
-  title,
-  description,
-  IconComponent,
-  action,
-  onClick,
-}) => (
-  <div
-    onClick={onClick}
-    className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-  >
-    <div className="flex items-center mb-2">
-      <div className="mr-2 p-1 bg-blue-100 rounded">
-        <IconComponent className="h-5 w-5 text-blue-600" />
-      </div>
-      <h4 className="font-medium text-gray-900">{title}</h4>
-    </div>
-    <p className="text-sm text-gray-600 mb-3">{description}</p>
-    <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-      {action} →
-    </button>
-  </div>
-);
-
 const ParentDashboard = () => {
   const { user, logout } = useAuth();
-  const [showQuickActions, setShowQuickActions] = useState(false);
+  const navigate = useNavigate();
   const logoutButtonRef = useRef(null);
   const isLoggingOutRef = useRef(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Navigation state
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   // State for real data
   const [dashboardData, setDashboardData] = useState({
@@ -347,17 +436,14 @@ const ParentDashboard = () => {
     async (e) => {
       e?.preventDefault();
 
-      // Prevent multiple logout attempts
       if (isLoggingOutRef.current || isLoggingOut) {
         console.log("Logout blocked - already in progress");
         return;
       }
 
-      // Set flags immediately
       isLoggingOutRef.current = true;
       setIsLoggingOut(true);
 
-      // Disable button immediately
       if (logoutButtonRef.current) {
         logoutButtonRef.current.disabled = true;
         logoutButtonRef.current.textContent = "Logging out...";
@@ -365,11 +451,9 @@ const ParentDashboard = () => {
 
       try {
         await logout();
-        // Force immediate redirect without React Router
         window.location.href = "/login";
       } catch (error) {
         console.error("Logout failed:", error);
-        // Reset on error
         setIsLoggingOut(false);
         isLoggingOutRef.current = false;
 
@@ -381,6 +465,15 @@ const ParentDashboard = () => {
     },
     [logout, isLoggingOut]
   );
+
+  // Navigation handlers
+  const handleProfileClick = () => {
+    setActiveTab("profile");
+  };
+
+  const handleViewChildrenDetails = () => {
+    navigate("/parent/children");
+  };
 
   // Fetch parent dashboard data
   useEffect(() => {
@@ -416,30 +509,6 @@ const ParentDashboard = () => {
     fetchParentData();
   }, [user?.id]);
 
-  const handleViewChildrenDetails = () => {
-    alert("Children details would open here");
-  };
-
-  const handleViewProfile = () => {
-    alert("Profile would open here");
-  };
-
-  const handleResourceAction = (resourceType) => {
-    switch (resourceType) {
-      case "calendar":
-        alert("Academic calendar will open here");
-        break;
-      case "messages":
-        alert("Communication hub will open here");
-        break;
-      case "handbook":
-        alert("Student handbook will download here");
-        break;
-      default:
-        alert("Feature coming soon!");
-    }
-  };
-
   const getTimeOfDay = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "morning";
@@ -469,35 +538,42 @@ const ParentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with Logout */}
-      <div className="bg-white shadow-sm border-b px-6 py-4 mb-8">
+      {/* Enhanced Header with User Menu */}
+      <div className="bg-white shadow-sm border-b px-4 sm:px-6 py-4 mb-8">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-4 lg:space-y-0">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Parent Dashboard
             </h1>
             <p className="text-gray-600 mt-1">
-              Welcome back, {getUserDisplayName(user)}!
+              Good {getTimeOfDay()}, {getUserDisplayName(user)}! Stay connected
+              with your children's education.
             </p>
             {isLoading && (
               <p className="text-sm text-blue-600 mt-1">
-                Loading children's data...
+                Loading your children's data...
               </p>
             )}
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="text-sm font-medium text-gray-900">
-                {getUserDisplayName(user)}
-              </p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
+
+          {/* Enhanced User Menu */}
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+            <UserMenuDropdown
+              isOpen={isUserMenuOpen}
+              setIsOpen={setIsUserMenuOpen}
+              user={user}
+              onProfileClick={handleProfileClick}
+              onLogout={handleLogout}
+              isLoggingOut={isLoggingOut}
+            />
+
+            {/* Mobile logout button for backup */}
             <button
               ref={logoutButtonRef}
               onClick={handleLogout}
               disabled={isLoggingOut}
               className={`
-                px-4 py-2 text-sm font-medium text-white rounded-lg 
+                sm:hidden w-full px-4 py-2 text-sm font-medium text-white rounded-lg 
                 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
                 ${
                   isLoggingOut
@@ -505,10 +581,6 @@ const ParentDashboard = () => {
                     : "bg-red-600 hover:bg-red-700"
                 }
               `}
-              style={{
-                userSelect: "none",
-                touchAction: "manipulation",
-              }}
             >
               {isLoggingOut ? "Logging out..." : "Logout"}
             </button>
@@ -516,268 +588,214 @@ const ParentDashboard = () => {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      {/* Tab Content */}
       <div className="px-6">
-        {/* Welcome Section */}
-        {/* Enhanced Dashboard Overview Component - Now properly positioned */}
-        <div className="mb-8">
-          <DashboardOverview userRole={user?.role} userId={user?.id} />
-        </div>
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                Good {getTimeOfDay()}, {getUserDisplayName(user)}!
-              </h2>
-              <p className="text-gray-600">
-                Here's what's happening with your child's education today.
-              </p>
+        {activeTab === "dashboard" && (
+          <>
+            {/* Enhanced Dashboard Overview Component */}
+            <div className="mb-8">
+              <DashboardOverview userRole={user?.role} userId={user?.id} />
             </div>
-            <div className="hidden md:flex space-x-3">
-              <QuickNavButton
-                label="My Children"
+
+            {/* Parent Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <StatCard
+                title="Children Enrolled"
+                value={
+                  isLoading ? "..." : dashboardData.childrenCount.toString()
+                }
+                color="blue"
+                subtitle="Active students"
                 IconComponent={Icons.UserGroup}
                 onClick={handleViewChildrenDetails}
               />
-              <QuickNavButton
-                label="Profile"
-                IconComponent={Icons.Edit}
-                onClick={handleViewProfile}
+              <StatCard
+                title="Upcoming Events"
+                value={
+                  isLoading ? "..." : dashboardData.upcomingEvents.toString()
+                }
+                color="green"
+                subtitle="This week"
+                IconComponent={Icons.Calendar}
+                onClick={() => console.log("Navigate to events calendar")}
               />
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Stats - Updated with real data */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard
-            title="Children Enrolled"
-            value={isLoading ? "..." : dashboardData.childrenCount.toString()}
-            color="blue"
-            subtitle="Active students"
-            IconComponent={Icons.UserGroup}
-            onClick={handleViewChildrenDetails}
-          />
-          <StatCard
-            title="Upcoming Events"
-            value={isLoading ? "..." : dashboardData.upcomingEvents.toString()}
-            color="green"
-            subtitle="This week"
-            IconComponent={Icons.Calendar}
-            onClick={() => alert("Events calendar will open here")}
-          />
-          <StatCard
-            title="Average Grade"
-            value={isLoading ? "..." : dashboardData.averageGrade}
-            color="purple"
-            subtitle="Overall performance"
-            IconComponent={Icons.Award}
-            onClick={handleViewChildrenDetails}
-          />
-          <StatCard
-            title="Attendance Rate"
-            value={isLoading ? "..." : dashboardData.attendanceRate}
-            color="orange"
-            subtitle="This semester"
-            IconComponent={Icons.Clock}
-            onClick={handleViewChildrenDetails}
-          />
-        </div>
-
-        {/* Dashboard Sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Children Overview - Now with real data */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                My Children
-              </h3>
-              <button
-                onClick={handleViewChildrenDetails}
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center transition-colors"
-              >
-                View Details →
-              </button>
-            </div>
-            <div className="space-y-4">
-              {isLoading ? (
-                <div className="flex justify-center items-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : dashboardData.children.length > 0 ? (
-                dashboardData.children.map((child, index) => (
-                  <ChildCard
-                    key={child.id}
-                    name={child.name}
-                    grade={`Grade ${8 + index * 2}`} // Mock grade data
-                    status="Present Today"
-                    statusColor="green"
-                    recentGrade={index === 0 ? "A" : "B+"}
-                    onClick={handleViewChildrenDetails}
-                  />
-                ))
-              ) : (
-                <p className="text-center text-gray-500 py-8">
-                  No children enrolled
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Recent Activity
-            </h3>
-            <div className="space-y-4">
-              <ActivityItem
-                type="grade"
-                message="Sarah received an A on Mathematics Quiz"
-                time="2 hours ago"
-              />
-              <ActivityItem
-                type="attendance"
-                message="Michael marked present for all classes today"
-                time="5 hours ago"
-              />
-              <ActivityItem
-                type="assignment"
-                message="New assignment posted in Sarah's English class"
-                time="1 day ago"
-              />
-            </div>
-          </div>
-
-          {/* Upcoming Events */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Upcoming Events
-            </h3>
-            <div className="space-y-4">
-              <EventItem
-                title="Parent-Teacher Conference"
-                date="Tomorrow, 3:00 PM"
-                type="meeting"
-              />
-              <EventItem
-                title="Science Fair"
-                date="Friday, All Day"
-                type="event"
-              />
-              <EventItem
-                title="Report Cards Available"
-                date="Next Monday"
-                type="grade"
-              />
-            </div>
-          </div>
-
-          {/* Quick Actions - Updated with SVG icons */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Quick Actions
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <ActionButton
-                title="View Grades"
+              <StatCard
+                title="Average Grade"
+                value={isLoading ? "..." : dashboardData.averageGrade}
+                color="purple"
+                subtitle="Overall performance"
                 IconComponent={Icons.Award}
                 onClick={handleViewChildrenDetails}
               />
-              <ActionButton
-                title="Check Attendance"
+              <StatCard
+                title="Attendance Rate"
+                value={isLoading ? "..." : dashboardData.attendanceRate}
+                color="orange"
+                subtitle="This semester"
                 IconComponent={Icons.Clock}
                 onClick={handleViewChildrenDetails}
               />
-              <ActionButton
-                title="Messages"
-                IconComponent={Icons.Mail}
-                onClick={() => alert("Messages will open here")}
-              />
-              <ActionButton
-                title="Settings"
-                IconComponent={Icons.Settings}
-                onClick={handleViewProfile}
+            </div>
+
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Children Overview */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Icons.UserGroup className="h-5 w-5" />
+                        <span>My Children</span>
+                      </div>
+                      <button
+                        onClick={handleViewChildrenDetails}
+                        className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center transition-colors"
+                      >
+                        View Details →
+                      </button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="flex justify-center items-center h-32">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      </div>
+                    ) : dashboardData.children.length > 0 ? (
+                      <div className="space-y-4">
+                        {dashboardData.children.map((child, index) => (
+                          <div
+                            key={child.id}
+                            onClick={handleViewChildrenDetails}
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                <Icons.User className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div className="ml-3">
+                                <p className="font-medium text-gray-900">
+                                  {child.name}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  Grade {8 + index * 2}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-medium text-green-600">
+                                Present Today
+                              </span>
+                              <p className="text-sm text-gray-500">
+                                Recent: {index === 0 ? "A" : "B+"}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Icons.UserGroup className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-500">No children enrolled</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Settings */}
+              <QuickSettingsCard
+                onProfileClick={handleProfileClick}
+                onChildrenClick={handleViewChildrenDetails}
               />
             </div>
 
-            {showQuickActions && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="grid grid-cols-2 gap-4">
-                  <ActionButton
-                    title="Academic Report"
-                    IconComponent={Icons.ClipboardList}
-                    onClick={handleViewChildrenDetails}
-                  />
-                  <ActionButton
-                    title="Payment History"
-                    IconComponent={Icons.CreditCard}
-                    onClick={() => alert("Payment history will open here")}
-                  />
-                </div>
-              </div>
-            )}
+            {/* Recent Activity and Upcoming Events */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="bg-blue-50 p-2 rounded-lg">
+                        <Icons.Award className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-900">
+                          Sarah received an A on Mathematics Quiz
+                        </p>
+                        <p className="text-xs text-gray-500">2 hours ago</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <div className="bg-green-50 p-2 rounded-lg">
+                        <Icons.Clock className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-900">
+                          Michael marked present for all classes today
+                        </p>
+                        <p className="text-xs text-gray-500">5 hours ago</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <button
-              onClick={() => setShowQuickActions(!showQuickActions)}
-              className="mt-4 w-full text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              {showQuickActions ? "Show Less" : "Show More Actions"}
-            </button>
-          </div>
-        </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Upcoming Events</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          Parent-Teacher Conference
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Tomorrow, 3:00 PM
+                        </p>
+                      </div>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                        meeting
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          Science Fair
+                        </p>
+                        <p className="text-sm text-gray-600">Friday, All Day</p>
+                      </div>
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                        event
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* Parent Resources - Updated with SVG icons */}
-        <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Parent Resources
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ResourceCard
-              title="Academic Calendar"
-              description="View important school dates and events"
-              IconComponent={Icons.Calendar}
-              action="View Calendar"
-              onClick={() => handleResourceAction("calendar")}
-            />
-            <ResourceCard
-              title="Communication Hub"
-              description="Messages from teachers and school administration"
-              IconComponent={Icons.Mail}
-              action="Check Messages"
-              onClick={() => handleResourceAction("messages")}
-            />
-            <ResourceCard
-              title="Student Handbook"
-              description="School policies and guidelines"
-              IconComponent={Icons.FileText}
-              action="Download PDF"
-              onClick={() => handleResourceAction("handbook")}
-            />
-          </div>
-        </div>
+            {/* Data Source Indicator */}
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-500">
+                {isLoading
+                  ? "Loading from database..."
+                  : `Data last updated: ${new Date().toLocaleString()}`}
+              </p>
+            </div>
+          </>
+        )}
 
-        {/* Data Source Indicator */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-gray-500">
-            {isLoading
-              ? "Loading from database..."
-              : `Data last updated: ${new Date().toLocaleString()}`}
-          </p>
-        </div>
-
-        {/* Debug Info */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h4 className="font-semibold text-yellow-800">Debug Info:</h4>
-            <p className="text-sm text-yellow-700">User Email: {user?.email}</p>
-            <p className="text-sm text-yellow-700">
-              User Role: {user?.role || "Not set"}
-            </p>
-            <p className="text-sm text-yellow-700">
-              Full Name: {user?.name || "Not set"}
-            </p>
-            <p className="text-sm text-yellow-700">
-              Children: {dashboardData.children.length}
-            </p>
+        {activeTab === "profile" && (
+          <div className="space-y-8">
+            <ParentProfile />
           </div>
         )}
       </div>
