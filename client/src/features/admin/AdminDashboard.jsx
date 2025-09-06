@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-// client/src/features/admin/AdminDashboard.jsx - Final version with proper TypeScript types
+// client/src/features/admin/AdminDashboard.jsx - Corrected version with proper tab navigation
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
@@ -10,8 +10,10 @@ import {
   getRecentActivities,
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
+import DashboardOverview from "../../components/dashboard/DashboardOverview";
+import AnalyticsDashboard from "../../components/analytics/AnalyticsDashboard";
 
-// SVG Icon Components (keep your existing ones)
+// SVG Icon Components
 const Icons = {
   Users: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
@@ -66,6 +68,26 @@ const Icons = {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      />
+    </svg>
+  ),
+  Home: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+      />
+    </svg>
+  ),
+  BarChart: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
       />
     </svg>
   ),
@@ -124,11 +146,65 @@ const StatsCard = ({
   </Card>
 );
 
+// Tab Navigation Component
+const TabNavigation = ({ activeTab, setActiveTab }) => {
+  const tabs = [
+    {
+      id: "overview",
+      name: "Dashboard Overview",
+      icon: Icons.Home,
+      description: "Main dashboard with statistics and charts",
+    },
+    {
+      id: "analytics",
+      name: "Advanced Analytics",
+      icon: Icons.BarChart,
+      description: "Detailed analytics and reports",
+    },
+  ];
+
+  return (
+    <div className="bg-white border-b mb-6">
+      <nav className="flex space-x-8 px-6">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              group inline-flex items-center py-4 border-b-2 font-medium text-sm transition-colors
+              ${
+                activeTab === tab.id
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }
+            `}
+          >
+            <tab.icon
+              className={`
+                -ml-0.5 mr-2 h-5 w-5 transition-colors
+                ${
+                  activeTab === tab.id
+                    ? "text-blue-500"
+                    : "text-gray-400 group-hover:text-gray-500"
+                }
+              `}
+            />
+            <span>{tab.name}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+};
+
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const logoutButtonRef = useRef(null);
   const isLoggingOutRef = useRef(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // ADD THE MISSING ACTIVE TAB STATE - THIS WAS THE MAIN ISSUE!
+  const [activeTab, setActiveTab] = useState("overview");
 
   // State with proper type initialization
   const [dashboardData, setDashboardData] = useState({
@@ -463,53 +539,71 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className="p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat) => (
-            <StatsCard key={stat.title} {...stat} loading={isLoading} />
-          ))}
-        </div>
+      {/* Tab Navigation - FIXED PLACEMENT */}
+      <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Attendance Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AttendanceChart />
-            </CardContent>
-          </Card>
+      {/* Tab Content - PROPERLY ORGANIZED */}
+      <div className="px-6">
+        {activeTab === "overview" && (
+          <div className="space-y-8">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {stats.map((stat) => (
+                <StatsCard key={stat.title} {...stat} loading={isLoading} />
+              ))}
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Academic Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PerformanceChart />
-            </CardContent>
-          </Card>
-        </div>
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Attendance Trends</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AttendanceChart />
+                </CardContent>
+              </Card>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RecentActivity />
-          </CardContent>
-        </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Academic Performance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PerformanceChart />
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* Data Source Indicator */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-gray-500">
-            {isLoading
-              ? "Loading from database..."
-              : `Data last updated: ${new Date().toLocaleString()}`}
-          </p>
-        </div>
+            {/* Recent Activity */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Activity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RecentActivity />
+              </CardContent>
+            </Card>
+
+            {/* Enhanced Dashboard Overview Component */}
+            <DashboardOverview userRole={user?.role} userId={user?.id} />
+
+            {/* Data Source Indicator */}
+            <div className="text-center">
+              <p className="text-xs text-gray-500">
+                {isLoading
+                  ? "Loading from database..."
+                  : `Data last updated: ${new Date().toLocaleString()}`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "analytics" && (
+          <div className="space-y-8">
+            {/* Enhanced Analytics Dashboard Component */}
+            <AnalyticsDashboard userRole={user?.role} />
+          </div>
+        )}
       </div>
     </div>
   );

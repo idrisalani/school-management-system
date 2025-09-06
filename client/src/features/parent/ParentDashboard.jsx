@@ -6,6 +6,7 @@ import {
   getParentDashboardData,
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
+import DashboardOverview from "../../components/dashboard/DashboardOverview";
 
 // SVG Icon Components
 const Icons = {
@@ -517,6 +518,10 @@ const ParentDashboard = () => {
 
       <div className="px-6">
         {/* Welcome Section */}
+        {/* Enhanced Dashboard Overview Component - Now properly positioned */}
+        <div className="mb-8">
+          <DashboardOverview userRole={user?.role} userId={user?.id} />
+        </div>
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>

@@ -6,6 +6,7 @@ import {
   getTeacherDashboardData,
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
+import DashboardOverview from "../../components/dashboard/DashboardOverview";
 
 // SVG Icon Components
 const Icons = {
@@ -437,6 +438,11 @@ const TeacherDashboard = () => {
       </div>
 
       <div className="p-6">
+        {/* Enhanced Dashboard Overview Component - Now properly positioned */}
+        <div className="mb-8">
+          <DashboardOverview userRole={user?.role} userId={user?.id} />
+        </div>
+
         {/* Class Stats - Now with real data */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {classStats.map((stat, index) => {
