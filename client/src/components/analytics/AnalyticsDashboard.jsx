@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AcademicPerformance from "./AcademicPerformance";
 import AttendanceAnalytics from "./AttendanceAnalytics";
 import FinancialMetrics from "./FinancialMetrics";
-import ResourceUtilization from "./ResourceUtilization";
+import { ResourceUtilization } from "./ResourceUtilization";
 import { Calendar, Download, Filter, RotateCcw } from "lucide-react";
 import { exportData } from "../../services/dashboardApi";
 
