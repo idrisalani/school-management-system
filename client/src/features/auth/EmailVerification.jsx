@@ -254,26 +254,6 @@ const EmailVerification = () => {
               {verificationState.message}
             </p>
 
-            {/* DEBUG PANEL - Remove in production */}
-            <div
-              style={{
-                background: "#f0f0f0",
-                padding: "10px",
-                margin: "10px 0",
-                fontSize: "12px",
-                border: "1px solid #ccc",
-                textAlign: "left",
-              }}
-            >
-              <strong>Debug Info:</strong>
-              <div>Next Step: {verificationState.nextStep}</div>
-              <div>Has User: {verificationState.user ? "Yes" : "No"}</div>
-              <div>
-                User Role: {verificationState.user?.role || "Not found"}
-              </div>
-              <div>Has Token: {verificationState.tempToken ? "Yes" : "No"}</div>
-            </div>
-
             {verificationState.nextStep === "complete_profile" && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h3 className="font-medium text-blue-900 mb-2">

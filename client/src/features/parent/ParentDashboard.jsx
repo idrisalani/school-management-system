@@ -1,5 +1,5 @@
 // @ts-nocheck
-// client/src/features/parent/ParentDashboard.jsx - Complete Production Ready Version
+// client/src/features/parent/ParentDashboard.jsx - Minimal Error Fixes Only
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -9,6 +9,24 @@ import {
 } from "../../services/dashboardApi.js";
 import DashboardOverview from "../../components/dashboard/DashboardOverview";
 import ParentProfile from "./ParentProfile";
+
+// ONLY FIX: Add safe getUserDisplayName fallback to prevent toString() errors
+const safeGetUserDisplayName = (user) => {
+  try {
+    return getUserDisplayName(user);
+  } catch (error) {
+    console.warn("getUserDisplayName error:", error);
+    // Safe fallback
+    if (!user) return "Guest";
+    const firstName = user.firstName || user.first_name || user.fname || "";
+    const lastName = user.lastName || user.last_name || user.lname || "";
+    if (firstName && lastName) return `${firstName} ${lastName}`;
+    if (firstName) return firstName;
+    if (user.username) return user.username;
+    if (user.email) return user.email;
+    return "Parent User";
+  }
+};
 
 // SVG Icon Components
 const Icons = {
@@ -251,9 +269,9 @@ const UserMenuDropdown = ({
         </div>
         <div className="hidden sm:block text-left">
           <p className="text-sm font-medium text-gray-900">
-            {getUserDisplayName(user)}
+            {safeGetUserDisplayName(user)}
           </p>
-          <p className="text-xs text-gray-500">{user?.email}</p>
+          <p className="text-xs text-gray-500">{user?.email || ""}</p>
         </div>
         <Icons.ChevronDown
           className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -265,9 +283,9 @@ const UserMenuDropdown = ({
           <div className="py-1">
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-sm font-medium text-gray-900">
-                {getUserDisplayName(user)}
+                {safeGetUserDisplayName(user)}
               </p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-xs text-gray-500">{user?.email || ""}</p>
               <p className="text-xs text-purple-600 font-medium">Parent</p>
             </div>
 
@@ -389,6 +407,14 @@ const StatCard = ({
     orange: "text-orange-600",
   };
 
+  // ONLY FIX: Safe value conversion to prevent toString() errors
+  const safeValue = (() => {
+    if (value === null || value === undefined) return "N/A";
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return value.toString();
+    return String(value);
+  })();
+
   return (
     <div
       onClick={onClick}
@@ -402,7 +428,7 @@ const StatCard = ({
         </div>
         <div className="ml-4">
           <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          <p className="text-2xl font-bold text-gray-900">{safeValue}</p>
           <p className="text-sm text-gray-500">{subtitle}</p>
         </div>
       </div>
@@ -546,8 +572,8 @@ const ParentDashboard = () => {
               Parent Dashboard
             </h1>
             <p className="text-gray-600 mt-1">
-              Good {getTimeOfDay()}, {getUserDisplayName(user)}! Stay connected
-              with your children's education.
+              Good {getTimeOfDay()}, {safeGetUserDisplayName(user)}! Stay
+              connected with your children's education.
             </p>
             {isLoading && (
               <p className="text-sm text-blue-600 mt-1">
@@ -604,9 +630,7 @@ const ParentDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <StatCard
                 title="Children Enrolled"
-                value={
-                  isLoading ? "..." : dashboardData.childrenCount.toString()
-                }
+                value={isLoading ? "..." : dashboardData.childrenCount}
                 color="blue"
                 subtitle="Active students"
                 IconComponent={Icons.UserGroup}
@@ -614,9 +638,7 @@ const ParentDashboard = () => {
               />
               <StatCard
                 title="Upcoming Events"
-                value={
-                  isLoading ? "..." : dashboardData.upcomingEvents.toString()
-                }
+                value={isLoading ? "..." : dashboardData.upcomingEvents}
                 color="green"
                 subtitle="This week"
                 IconComponent={Icons.Calendar}
@@ -664,7 +686,8 @@ const ParentDashboard = () => {
                       <div className="flex justify-center items-center h-32">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       </div>
-                    ) : dashboardData.children.length > 0 ? (
+                    ) : dashboardData.children &&
+                      dashboardData.children.length > 0 ? (
                       <div className="space-y-4">
                         {dashboardData.children.map((child, index) => (
                           <div
@@ -678,7 +701,7 @@ const ParentDashboard = () => {
                               </div>
                               <div className="ml-3">
                                 <p className="font-medium text-gray-900">
-                                  {child.name}
+                                  {child.name || "Unknown"}
                                 </p>
                                 <p className="text-sm text-gray-600">
                                   Grade {8 + index * 2}
