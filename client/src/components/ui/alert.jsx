@@ -1,109 +1,119 @@
-// @ts-nocheck
+// @ts-check
 import React from "react";
 import PropTypes from "prop-types";
-import { AlertCircle, CheckCircle2, XCircle, Info } from "lucide-react";
 
-const variants = {
-  default: "bg-background text-foreground border-border",
-  destructive: "bg-red-50 text-red-800 border-red-200",
-  success: "bg-green-50 text-green-800 border-green-200",
-  warning: "bg-yellow-50 text-yellow-800 border-yellow-200",
-  info: "bg-blue-50 text-blue-800 border-blue-200",
-};
-
-// Icon mapping for each variant
-const variantIcons = {
-  default: Info,
-  destructive: XCircle,
-  success: CheckCircle2,
-  warning: AlertCircle,
-  info: Info,
+// Alert variants
+const alertVariants = {
+  default: "bg-background text-foreground border",
+  destructive:
+    "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+  warning:
+    "border-yellow-500/50 text-yellow-800 dark:border-yellow-500 [&>svg]:text-yellow-600",
+  success:
+    "border-green-500/50 text-green-800 dark:border-green-500 [&>svg]:text-green-600",
 };
 
 /**
- * Alert component for various notifications
+ * Alert component for displaying important messages
  * @param {object} props - Component properties
- * @param {string} [props.className] - Additional CSS classes
- * @param {string} [props.variant] - Alert variant style
  * @param {React.ReactNode} props.children - Alert content
- * @param {boolean} [props.showIcon] - Whether to show the variant icon
+ * @param {string} [props.className] - Additional CSS classes
+ * @param {'default' | 'destructive' | 'warning' | 'success'} [props.variant] - Alert variant
  * @returns {React.ReactElement} Alert component
  */
-const Alert = ({
-  className = "",
-  variant = "default",
-  children,
-  showIcon = true,
-  ...props
-}) => {
-  const IconComponent = variantIcons[variant] || variantIcons.default;
+export const Alert = React.forwardRef(
+  /**
+   * @param {{ children: React.ReactNode, className?: string, variant?: 'default' | 'destructive' | 'warning' | 'success' }} props
+   * @param {React.ForwardedRef<HTMLDivElement>} ref
+   */
+  ({ children, className = "", variant = "default", ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        role="alert"
+        className={`relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground ${alertVariants[variant]} ${className}`}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  }
+);
 
-  return (
-    <div
-      role="alert"
-      className={`relative w-full rounded-lg border p-4 ${
-        showIcon
-          ? "[&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg+div]:translate-y-[-3px] [&:has(svg)]:pl-11"
-          : ""
-      } ${variants[variant]} ${className}`}
-      {...props}
-    >
-      {showIcon && <IconComponent className="h-4 w-4" />}
-      {children}
-    </div>
-  );
-};
+Alert.displayName = "Alert";
 
 /**
  * Alert title component
  * @param {object} props - Component properties
- * @param {string} [props.className] - Additional CSS classes
  * @param {React.ReactNode} props.children - Title content
- * @returns {React.ReactElement} Alert title component
+ * @param {string} [props.className] - Additional CSS classes
+ * @returns {React.ReactElement} AlertTitle component
  */
-const AlertTitle = ({ className = "", children, ...props }) => (
-  <h5
-    className={`mb-1 font-medium leading-none tracking-tight ${className}`}
-    {...props}
-  >
-    {children}
-  </h5>
+export const AlertTitle = React.forwardRef(
+  /**
+   * @param {{ children: React.ReactNode, className?: string }} props
+   * @param {React.ForwardedRef<HTMLHeadingElement>} ref
+   */
+  ({ children, className = "", ...props }, ref) => (
+    <h5
+      ref={ref}
+      className={`mb-1 font-medium leading-none tracking-tight ${className}`}
+      {...props}
+    >
+      {children}
+    </h5>
+  )
 );
+
+AlertTitle.displayName = "AlertTitle";
 
 /**
  * Alert description component
  * @param {object} props - Component properties
- * @param {string} [props.className] - Additional CSS classes
  * @param {React.ReactNode} props.children - Description content
- * @returns {React.ReactElement} Alert description component
+ * @param {string} [props.className] - Additional CSS classes
+ * @returns {React.ReactElement} AlertDescription component
  */
-const AlertDescription = ({ className = "", children, ...props }) => (
-  <div className={`text-sm [&_p]:leading-relaxed ${className}`} {...props}>
-    {children}
-  </div>
+export const AlertDescription = React.forwardRef(
+  /**
+   * @param {{ children: React.ReactNode, className?: string }} props
+   * @param {React.ForwardedRef<HTMLDivElement>} ref
+   */
+  ({ children, className = "", ...props }, ref) => (
+    <div
+      ref={ref}
+      className={`text-sm [&_p]:leading-relaxed ${className}`}
+      {...props}
+    >
+      {children}
+    </div>
+  )
 );
 
+AlertDescription.displayName = "AlertDescription";
+
+// PropTypes
 Alert.propTypes = {
-  className: PropTypes.string,
-  variant: PropTypes.oneOf([
-    "default",
-    "destructive",
-    "success",
-    "warning",
-    "info",
-  ]),
   children: PropTypes.node.isRequired,
-  showIcon: PropTypes.bool,
+  className: PropTypes.string,
+  variant: PropTypes.oneOf(["default", "destructive", "warning", "success"]),
 };
 
 AlertTitle.propTypes = {
-  className: PropTypes.string,
   children: PropTypes.node.isRequired,
+  className: PropTypes.string,
 };
 
 AlertDescription.propTypes = {
-  className: PropTypes.string,
   children: PropTypes.node.isRequired,
+  className: PropTypes.string,
 };
 
-export { Alert, AlertTitle, AlertDescription };
+// Export default object with proper variable assignment
+const AlertComponents = {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+};
+
+export default AlertComponents;
