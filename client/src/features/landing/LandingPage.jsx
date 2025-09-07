@@ -1,58 +1,8 @@
-// @ts-nocheck
-
-// src/features/landing/LandingPage.jsx
+// Replace: src/features/landing/LandingPage.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import {
-  Users,
-  BookOpen,
-  Calendar,
-  ClipboardCheck,
-  GraduationCap,
-  Bell,
-  BarChart3, // Changed from ChartBar
-} from "lucide-react";
 
 const LandingPage = () => {
-  const features = [
-    {
-      icon: <Users className="w-6 h-6" />,
-      title: "User Management",
-      description:
-        "Efficiently manage students, teachers, and staff with role-based access control.",
-    },
-    {
-      icon: <BookOpen className="w-6 h-6" />,
-      title: "Academic Management",
-      description:
-        "Handle courses, assignments, and grades in one centralized system.",
-    },
-    {
-      icon: <Calendar className="w-6 h-6" />,
-      title: "Attendance Tracking",
-      description:
-        "Monitor student and teacher attendance with automated reporting.",
-    },
-    {
-      icon: <ClipboardCheck className="w-6 h-6" />,
-      title: "Assessment Tools",
-      description:
-        "Create and grade assignments, tests, and track student progress.",
-    },
-    {
-      icon: <Bell className="w-6 h-6" />,
-      title: "Communication",
-      description:
-        "Seamless communication between teachers, students, and parents.",
-    },
-    {
-      icon: <BarChart3 className="w-6 h-6" />, // Changed from ChartBar
-      title: "Analytics",
-      description:
-        "Comprehensive reports and analytics for data-driven decisions.",
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Navigation */}
@@ -60,18 +10,23 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <GraduationCap className="h-8 w-8 text-indigo-600" />
+              <div className="h-8 w-8 bg-indigo-600 rounded flex items-center justify-center">
+                <span className="text-white font-bold">E</span>
+              </div>
               <span className="ml-2 text-xl font-bold text-gray-900">
                 EduManager
               </span>
             </div>
             <div className="flex items-center space-x-4">
-              <Link to="/login" className="text-gray-600 hover:text-gray-900">
+              <Link
+                to="/login"
+                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+              >
                 Login
               </Link>
               <Link
                 to="/register"
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
               >
                 Get Started
               </Link>
@@ -88,9 +43,9 @@ const LandingPage = () => {
             <span className="block text-indigo-600">Made Simple</span>
           </h1>
           <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-            Streamline your educational institution&apos;s operations with our
+            Streamline your educational institution's operations with our
             comprehensive management system. From attendance tracking to grade
-            management, we&apos;ve got everything you need.
+            management, we've got everything you need.
           </p>
           <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
             <div className="rounded-md shadow">
@@ -116,12 +71,47 @@ const LandingPage = () => {
       {/* Features Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, index) => (
+          {[
+            {
+              title: "User Management",
+              description:
+                "Efficiently manage students, teachers, and staff with role-based access control.",
+            },
+            {
+              title: "Academic Management",
+              description:
+                "Handle courses, assignments, and grades in one centralized system.",
+            },
+            {
+              title: "Attendance Tracking",
+              description:
+                "Monitor student and teacher attendance with automated reporting.",
+            },
+            {
+              title: "Assessment Tools",
+              description:
+                "Create and grade assignments, tests, and track student progress.",
+            },
+            {
+              title: "Communication",
+              description:
+                "Seamless communication between teachers, students, and parents.",
+            },
+            {
+              title: "Analytics",
+              description:
+                "Comprehensive reports and analytics for data-driven decisions.",
+            },
+          ].map((feature, index) => (
             <div
               key={index}
               className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
             >
-              <div className="text-indigo-600 mb-4">{feature.icon}</div>
+              <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                <span className="text-indigo-600 font-semibold">
+                  {index + 1}
+                </span>
+              </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 {feature.title}
               </h3>
