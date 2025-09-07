@@ -24,7 +24,7 @@ export const useDialog = () => {
  * @param {boolean} props.isOpen - Whether dialog is open
  * @param {function} props.onClose - Close handler
  * @param {string} [props.className] - Additional CSS classes
- * @returns {React.ReactElement|null} DialogContent component
+ * @returns {React.ReactElement|null} Dialog component
  */
 export const Dialog = ({
   children,
@@ -82,6 +82,26 @@ export const Dialog = ({
     </div>
   );
 };
+
+/**
+ * Dialog trigger component (for compatibility)
+ * @param {object} props - Component properties
+ * @param {React.ReactNode} props.children - Trigger content
+ * @returns {React.ReactElement} DialogTrigger component
+ */
+export const DialogTrigger = ({ children, ...props }) => (
+  <div {...props}>{children}</div>
+);
+
+/**
+ * Dialog content wrapper (for compatibility)
+ * @param {object} props - Component properties
+ * @param {React.ReactNode} props.children - Content
+ * @returns {React.ReactElement} DialogContent component
+ */
+export const DialogContent = ({ children, ...props }) => (
+  <div {...props}>{children}</div>
+);
 
 /**
  * Dialog header component
@@ -152,6 +172,14 @@ Dialog.propTypes = {
   className: PropTypes.string,
 };
 
+DialogTrigger.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
+DialogContent.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
 DialogHeader.propTypes = {
   children: PropTypes.node.isRequired,
   className: PropTypes.string,
@@ -175,6 +203,8 @@ DialogFooter.propTypes = {
 // Export default object with proper variable assignment
 const DialogComponents = {
   Dialog,
+  DialogTrigger,
+  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
