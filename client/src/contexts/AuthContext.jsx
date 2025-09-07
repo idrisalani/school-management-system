@@ -118,7 +118,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.getItem("accessToken") || localStorage.getItem("token");
       if (accessToken) {
         try {
-          // Direct API call for logout
+          // Only call logout API if we have a token
           await fetch(`${process.env.REACT_APP_API_URL}/api/v1/auth/logout`, {
             method: "POST",
             headers: {
@@ -372,9 +372,6 @@ export const AuthProvider = ({ children }) => {
         // Clean up temp token
         localStorage.removeItem("tempToken");
 
-        // Update API headers with the real token
-        // Note: You might need to set up an API client instance to avoid direct fetch calls
-
         setUser(userData);
 
         console.log(
@@ -428,26 +425,15 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /**
-   * Verifies current authentication status with FIXED backend compatibility
-   * @returns {Promise<void>}
+   * Helper function to verify authentication with backend
+   * @param {string} accessToken
    */
-  const checkAuth = useCallback(async () => {
-    const accessToken =
-      localStorage.getItem("accessToken") || localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
-
-    if (!accessToken) {
-      console.log("🔍 AuthContext: No token found, user not authenticated");
-      setUser(null);
-      return;
-    }
-
+  const verifyWithBackend = useCallback(async (accessToken) => {
     try {
       setIsLoading(true);
 
       console.log("🔍 AuthContext: Verifying authentication with backend");
 
-      // Direct API call for verification
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/api/v1/auth/verify-auth`,
         {
@@ -487,18 +473,6 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn("⚠️ AuthContext: Authentication verification failed:", err);
 
-      // If verification fails, try to use stored user data as fallback
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          console.log("🔄 AuthContext: Using stored user data as fallback");
-          setUser(userData);
-          return;
-        } catch (parseError) {
-          console.error("❌ AuthContext: Failed to parse stored user data");
-        }
-      }
-
       // Clean up invalid authentication
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
@@ -506,7 +480,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem("user");
       setUser(null);
 
-      // Don't set error for auth verification failures during initialization
+      // Don't set error for expected auth failures
       if (!err?.message?.includes("401") && !err?.message?.includes("403")) {
         console.error(
           "❌ AuthContext: Unexpected error during auth verification:",
@@ -518,13 +492,63 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Initialize authentication on mount
+  /**
+   * FIXED: Only verify auth when token exists and don't make unnecessary API calls
+   * @returns {Promise<void>}
+   */
+  const checkAuth = useCallback(async () => {
+    const accessToken =
+      localStorage.getItem("accessToken") || localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+
+    // If no token exists, user is not authenticated - no API call needed
+    if (!accessToken) {
+      console.log("🔍 AuthContext: No token found, user not authenticated");
+      setUser(null);
+      return;
+    }
+
+    // If we have a stored user and token, use it initially (fast startup)
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        console.log("🔄 AuthContext: Using stored user data");
+        setUser(userData);
+
+        // Optionally verify with backend in background (don't await)
+        verifyWithBackend(accessToken);
+        return;
+      } catch (parseError) {
+        console.error("❌ AuthContext: Failed to parse stored user data");
+        // Continue to backend verification
+      }
+    }
+
+    // Only make API call if we have a token but no valid stored user
+    await verifyWithBackend(accessToken);
+  }, [verifyWithBackend]);
+
+  // FIXED: Initialize authentication more carefully
   useEffect(() => {
     let mounted = true;
 
     const initAuth = async () => {
       if (mounted) {
         console.log("🚀 AuthContext: Initializing authentication");
+
+        // Quick check: if no token exists, don't make any API calls
+        const hasToken =
+          localStorage.getItem("accessToken") || localStorage.getItem("token");
+
+        if (!hasToken) {
+          console.log(
+            "🔍 AuthContext: No token found during init, skipping auth check"
+          );
+          setUser(null);
+          return;
+        }
+
+        // Only check auth if we have a token
         await checkAuth();
         console.log("✅ AuthContext: Authentication initialization complete");
       }
