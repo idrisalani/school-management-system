@@ -1,15 +1,13 @@
-// @ts-nocheck
-
-// src/index.js - Simplified version
+// src/index.js - Fixed version with .js extension
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
-import App from "./App";
+import App from "./App.js"; // Add .js extension
 
 // Remove loading screen if it exists
 const removeLoader = () => {
   const loader = document.querySelector(".app-loading");
-  if (loader) {
+  if (loader instanceof HTMLElement) {
     loader.style.display = "none";
   }
 };
