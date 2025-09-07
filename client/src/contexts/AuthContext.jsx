@@ -516,7 +516,7 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
 
         // Optionally verify with backend in background (don't await)
-        verifyWithBackend(accessToken);
+        //verifyWithBackend(accessToken);
         return;
       } catch (parseError) {
         console.error("❌ AuthContext: Failed to parse stored user data");
