@@ -1,5 +1,5 @@
 // @ts-nocheck
-// client/src/features/parent/ParentDashboard.jsx - Minimal Error Fixes Only
+// FIXED: client/src/features/parent/ParentDashboard.jsx - Prevent unauthorized API calls
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -28,7 +28,7 @@ const safeGetUserDisplayName = (user) => {
   }
 };
 
-// SVG Icon Components
+// SVG Icon Components (keeping existing ones)
 const Icons = {
   Users: ({ className = "h-6 w-6", color = "currentColor" }) => (
     <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
@@ -77,16 +77,6 @@ const Icons = {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  ),
-  Mail: ({ className = "h-6 w-6", color = "currentColor" }) => (
-    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
       />
     </svg>
   ),
@@ -168,7 +158,7 @@ const Icons = {
   ),
 };
 
-// Card components
+// Card components (keeping existing)
 const Card = ({ children, className = "" }) => (
   <div className={`bg-white shadow rounded-lg ${className}`}>{children}</div>
 );
@@ -187,7 +177,7 @@ const CardContent = ({ children, className = "" }) => (
   <div className={`px-4 py-5 ${className}`}>{children}</div>
 );
 
-// Tab Navigation Component
+// Tab Navigation Component (keeping existing)
 const TabNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     {
@@ -236,7 +226,7 @@ const TabNavigation = ({ activeTab, setActiveTab }) => {
   );
 };
 
-// User Menu Dropdown Component
+// User Menu Dropdown Component (keeping existing)
 const UserMenuDropdown = ({
   isOpen,
   setIsOpen,
@@ -318,7 +308,7 @@ const UserMenuDropdown = ({
   );
 };
 
-// Quick Settings Card Component
+// Quick Settings Card Component (keeping existing)
 const QuickSettingsCard = ({ onProfileClick, onChildrenClick }) => (
   <Card>
     <CardHeader>
@@ -384,7 +374,7 @@ const QuickSettingsCard = ({ onProfileClick, onChildrenClick }) => (
   </Card>
 );
 
-// Stats Card Component
+// Stats Card Component (keeping existing)
 const StatCard = ({
   title,
   value,
@@ -437,7 +427,7 @@ const StatCard = ({
 };
 
 const ParentDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth(); // Add isAuthenticated
   const navigate = useNavigate();
   const logoutButtonRef = useRef(null);
   const isLoggingOutRef = useRef(false);
@@ -501,19 +491,34 @@ const ParentDashboard = () => {
     navigate("/parent/children");
   };
 
-  // Fetch parent dashboard data
+  // FIXED: Fetch parent dashboard data only when authenticated
   useEffect(() => {
     const fetchParentData = async () => {
-      if (!user?.id) return;
+      // FIXED: Only fetch data if user is authenticated
+      if (!isAuthenticated || !user?.id) {
+        console.log(
+          "🔒 ParentDashboard: User not authenticated, skipping API calls"
+        );
+        setIsLoading(false);
+        return;
+      }
 
       try {
         setIsLoading(true);
         setError(null);
 
+        console.log(
+          "📊 ParentDashboard: Fetching data for authenticated parent:",
+          user.id
+        );
         const data = await getParentDashboardData(user.id);
         setDashboardData(data);
+        console.log("✅ ParentDashboard: Data fetched successfully");
       } catch (error) {
-        console.error("Failed to fetch parent dashboard data:", error);
+        console.error(
+          "❌ ParentDashboard: Failed to fetch parent dashboard data:",
+          error
+        );
         setError("Failed to load parent data. Please check your connection.");
 
         // Fallback data
@@ -533,7 +538,7 @@ const ParentDashboard = () => {
     };
 
     fetchParentData();
-  }, [user?.id]);
+  }, [user?.id, isAuthenticated]); // Add isAuthenticated dependency
 
   const getTimeOfDay = () => {
     const hour = new Date().getHours();
@@ -541,6 +546,25 @@ const ParentDashboard = () => {
     if (hour < 17) return "afternoon";
     return "evening";
   };
+
+  // FIXED: Show authentication message when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">
+            Please log in to access your parent dashboard
+          </p>
+          <button
+            onClick={() => navigate("/login")}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Error state
   if (error && !isLoading) {
@@ -621,7 +645,7 @@ const ParentDashboard = () => {
       <div className="px-6">
         {activeTab === "dashboard" && (
           <>
-            {/* Enhanced Dashboard Overview Component */}
+            {/* Enhanced Dashboard Overview Component - FIXED: Pass authentication status */}
             <div className="mb-8">
               <DashboardOverview userRole={user?.role} userId={user?.id} />
             </div>

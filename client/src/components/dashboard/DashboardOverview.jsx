@@ -1,7 +1,8 @@
 // @ts-nocheck
 
-// ENHANCED: components/dashboard/DashboardOverview.jsx
+// FIXED: components/dashboard/DashboardOverview.jsx - Prevent unauthorized API calls
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../../contexts/AuthContext.jsx"; // Add this import
 import {
   Users,
   GraduationCap,
@@ -43,6 +44,7 @@ import {
 } from "../../services/dashboardApi";
 
 const DashboardOverview = ({ userRole = "admin", userId }) => {
+  const { isAuthenticated, user } = useAuth(); // Add auth context
   const [dashboardData, setDashboardData] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,9 +53,33 @@ const DashboardOverview = ({ userRole = "admin", userId }) => {
   const [selectedMetric, setSelectedMetric] = useState(null);
 
   const fetchDashboardData = useCallback(async () => {
+    // FIXED: Only fetch data if user is authenticated
+    if (!isAuthenticated || !user) {
+      console.log(
+        "🔒 DashboardOverview: User not authenticated, skipping API calls"
+      );
+      setIsLoading(false);
+      setDashboardData({
+        studentCount: "0",
+        teacherCount: "0",
+        averageAttendance: "0%",
+        revenue: "$0",
+      });
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
+
+      console.log(
+        "📊 DashboardOverview: Fetching data for authenticated user:",
+        {
+          userRole,
+          userId,
+          isAuthenticated,
+        }
+      );
 
       let data;
       switch (userRole) {
@@ -75,8 +101,12 @@ const DashboardOverview = ({ userRole = "admin", userId }) => {
 
       setDashboardData(data);
       setLastUpdate(new Date());
+      console.log("✅ DashboardOverview: Data fetched successfully");
     } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
+      console.error(
+        "❌ DashboardOverview: Failed to fetch dashboard data:",
+        err
+      );
       setError(err.message);
 
       // Fallback data for demo purposes
@@ -89,31 +119,78 @@ const DashboardOverview = ({ userRole = "admin", userId }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [userRole, userId]);
+  }, [userRole, userId, isAuthenticated, user]);
 
   const fetchNotifications = useCallback(async () => {
+    // FIXED: Only fetch notifications if user is authenticated
+    if (!isAuthenticated || !user) {
+      console.log(
+        "🔒 DashboardOverview: User not authenticated, skipping notifications"
+      );
+      setNotifications([]);
+      return;
+    }
+
     try {
+      console.log(
+        "🔔 DashboardOverview: Fetching notifications for authenticated user"
+      );
       const notificationData = await getNotifications(5, true);
       setNotifications(notificationData);
+      console.log("✅ DashboardOverview: Notifications fetched successfully");
     } catch (err) {
-      console.error("Failed to fetch notifications:", err);
+      console.error(
+        "❌ DashboardOverview: Failed to fetch notifications:",
+        err
+      );
+      // Don't set error state for notifications, just log and continue
+      setNotifications([]);
     }
-  }, []);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchNotifications();
+    // FIXED: Add authentication check before making any API calls
+    if (isAuthenticated && user) {
+      fetchDashboardData();
+      fetchNotifications();
+    } else {
+      console.log("🔒 DashboardOverview: Waiting for authentication...");
+      setIsLoading(false);
+      setDashboardData({
+        studentCount: "0",
+        teacherCount: "0",
+        averageAttendance: "0%",
+        revenue: "$0",
+      });
+      setNotifications([]);
+    }
 
     // Listen for refresh events
-    const handleRefresh = () => fetchDashboardData();
+    const handleRefresh = () => {
+      if (isAuthenticated && user) {
+        fetchDashboardData();
+      }
+    };
+
     window.addEventListener("dashboard-refresh", handleRefresh);
 
     return () => window.removeEventListener("dashboard-refresh", handleRefresh);
-  }, [fetchDashboardData, fetchNotifications]);
+  }, [fetchDashboardData, fetchNotifications, isAuthenticated, user]);
 
   const handleStatCardClick = (statType) => {
     setSelectedMetric(statType);
   };
+
+  // FIXED: Show appropriate message when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-8">
+          <p className="text-gray-500">Please log in to view dashboard data</p>
+        </div>
+      </div>
+    );
+  }
 
   const stats = [
     {
@@ -255,7 +332,11 @@ const DashboardOverview = ({ userRole = "admin", userId }) => {
             </DialogContent>
           </Dialog>
 
-          <Button onClick={fetchDashboardData} disabled={isLoading} size="sm">
+          <Button
+            onClick={fetchDashboardData}
+            disabled={isLoading || !isAuthenticated}
+            size="sm"
+          >
             Refresh
           </Button>
         </div>
