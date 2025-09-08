@@ -1,9 +1,10 @@
-// server/src/services/email.service.js - Gmail Replacement Version with Email Verification
-import nodemailer from "nodemailer";
+// server/src/services/email.service.js - Brevo Integration Version
+import axios from "axios";
 
 class EmailService {
   constructor() {
-    this.transporter = null;
+    this.brevoApiKey = null;
+    this.brevoApiUrl = "https://api.brevo.com/v3/smtp/email";
     this.isConfigured = false;
     this.mode = "unknown";
     this.initError = null;
@@ -33,68 +34,67 @@ class EmailService {
   }
 
   /**
-   * Initialize Gmail email service
+   * Initialize Brevo email service
    */
   init() {
     try {
-      const gmailUser = process.env.GMAIL_USER;
-      const gmailPassword = process.env.GMAIL_APP_PASSWORD;
+      this.brevoApiKey = process.env.BREVO_API_KEY;
 
-      if (!gmailUser || !gmailPassword) {
-        this.log("warn", "Gmail credentials not found, using mock mode");
-        this.initMockMode("Gmail credentials missing");
+      if (!this.brevoApiKey) {
+        this.log("warn", "Brevo API key not found, using mock mode");
+        this.initMockMode("Brevo API key missing");
         return;
       }
 
-      // Validate email format
-      if (!gmailUser.includes("@gmail.com")) {
-        this.log("warn", "Invalid Gmail address format");
-        this.initMockMode("Invalid Gmail address format");
+      // Validate API key format (Brevo keys start with xkeysib-)
+      if (!this.brevoApiKey.startsWith("xkeysib-")) {
+        this.log("warn", "Invalid Brevo API key format");
+        this.initMockMode("Invalid Brevo API key format");
         return;
       }
-
-      // Initialize Gmail transporter
-      this.transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: gmailUser,
-          pass: gmailPassword, // App Password, not regular password
-        },
-        pool: true,
-        maxConnections: 5,
-        maxMessages: 10,
-        secure: true,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
 
       this.isConfigured = true;
-      this.mode = "gmail";
+      this.mode = "brevo";
 
-      this.log("info", "Gmail email service initialized successfully");
+      this.log("info", "Brevo email service initialized successfully");
 
-      // Verify connection
+      // Test the API key
       this.verifyConnection();
     } catch (error) {
-      this.log("error", "Gmail initialization failed", { error: error.message });
+      this.log("error", "Brevo initialization failed", { error: error.message });
       this.initMockMode(error.message);
     }
   }
 
   /**
-   * Verify Gmail connection
+   * Verify Brevo API connection
    */
   async verifyConnection() {
-    if (!this.transporter) return false;
+    if (!this.brevoApiKey) return false;
 
     try {
-      await this.transporter.verify();
-      this.log("info", "Gmail SMTP connection verified successfully");
-      return true;
+      const response = await axios.get("https://api.brevo.com/v3/account", {
+        headers: {
+          "api-key": this.brevoApiKey,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.status === 200) {
+        this.log("info", "Brevo API connection verified successfully", {
+          accountName: response.data.companyName || "Unknown",
+          plan: response.data.plan?.type || "Unknown",
+        });
+        return true;
+      }
+
+      return false;
     } catch (error) {
-      this.log("error", "Gmail SMTP verification failed", { error: error.message });
-      // Don't switch to mock mode, just log the error
+      this.log("error", "Brevo API verification failed", {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
       return false;
     }
   }
@@ -110,7 +110,7 @@ class EmailService {
   }
 
   /**
-   * Send email - main method (same interface as before)
+   * Send email - main method
    */
   async sendEmail(options) {
     try {
@@ -126,8 +126,8 @@ class EmailService {
         return this.sendMockEmail(options);
       }
 
-      if (this.mode === "gmail") {
-        return this.sendGmailEmail(options);
+      if (this.mode === "brevo") {
+        return this.sendBrevoEmail(options);
       }
 
       throw new Error(`Unknown email mode: ${this.mode}`);
@@ -147,77 +147,91 @@ class EmailService {
   }
 
   /**
-   * Send email via Gmail (replaces sendBrevoEmail)
+   * Send email via Brevo API
    */
-  async sendGmailEmail(options) {
+  async sendBrevoEmail(options) {
     try {
       const { to, subject, html, text } = options;
 
-      const mailOptions = {
-        from: {
+      const emailData = {
+        sender: {
           name: process.env.EMAIL_FROM_NAME || "School Management System",
-          address: process.env.GMAIL_USER,
+          email: process.env.EMAIL_FROM || "idris.bin.muslih@outlook.com",
         },
-        to: to,
+        to: [
+          {
+            email: to,
+            name: to, // Can be enhanced to include actual names
+          },
+        ],
         subject: subject,
-        html: html || `<p>${text}</p>`,
-        text: text || this.stripHtmlTags(html || ""),
+        htmlContent: html || `<p>${text}</p>`,
+        textContent: text || this.stripHtmlTags(html || ""),
         headers: {
           "X-Priority": "3",
           "X-Mailer": "School Management System v1.0",
         },
       };
 
-      this.log("info", "Sending email via Gmail", {
+      this.log("info", "Sending email via Brevo", {
         to: to,
         subject: subject,
-        from: process.env.GMAIL_USER,
+        from: emailData.sender.email,
       });
 
-      const result = await this.transporter.sendMail(mailOptions);
+      const response = await axios.post(this.brevoApiUrl, emailData, {
+        headers: {
+          "api-key": this.brevoApiKey,
+          "Content-Type": "application/json",
+        },
+      });
 
-      this.log("info", "Gmail email sent successfully", {
-        messageId: result.messageId,
-        response: result.response,
+      this.log("info", "Brevo email sent successfully", {
+        messageId: response.data.messageId,
         to: to,
+        status: response.status,
       });
 
       return {
         success: true,
-        messageId: result.messageId,
-        provider: "Gmail SMTP",
-        mode: "gmail",
-        response: result.response,
+        messageId: response.data.messageId,
+        provider: "Brevo API",
+        mode: "brevo",
+        response: response.data,
       };
     } catch (error) {
-      this.log("error", "Gmail send failed", {
+      this.log("error", "Brevo send failed", {
         error: error.message,
-        errorCode: error.code,
-        command: error.command,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
       });
 
       let errorMessage = error.message;
 
-      // Handle specific Gmail errors
-      if (error.code === "EAUTH") {
-        errorMessage = "Gmail authentication failed. Check your email and app password.";
-      } else if (error.code === "EMESSAGE") {
-        errorMessage = "Gmail message format error. Check email content.";
-      } else if (error.responseCode === 550) {
-        errorMessage = "Gmail rejected the email. Recipient may not exist.";
+      // Handle specific Brevo errors
+      if (error.response?.status === 401) {
+        errorMessage = "Brevo authentication failed. Check your API key.";
+      } else if (error.response?.status === 400) {
+        errorMessage = "Brevo rejected the email. Check email format and content.";
+      } else if (error.response?.status === 402) {
+        errorMessage = "Brevo quota exceeded. Upgrade your plan or wait for reset.";
+      } else if (error.response?.data?.message) {
+        errorMessage = `Brevo Error: ${error.response.data.message}`;
       }
 
       return {
         success: false,
-        error: `Gmail Error: ${errorMessage}`,
-        mode: "gmail",
-        errorCode: error.code,
+        error: errorMessage,
+        mode: "brevo",
+        statusCode: error.response?.status,
+        brevoError: error.response?.data,
       };
     }
   }
 
   /**
-   * Mock email for development (same as before)
+   * Mock email for development
    */
   async sendMockEmail(options) {
     const { to, subject, text, html } = options;
@@ -240,12 +254,12 @@ class EmailService {
   }
 
   /**
-   * Send welcome email (same interface, enhanced template)
+   * Send welcome email
    */
   async sendWelcomeEmail(userData, recipientEmail) {
     const { name, username, role } = userData;
 
-    const subject = "🎓 Welcome to School Management System";
+    const subject = "Welcome to School Management System";
 
     const html = `
       <!DOCTYPE html>
@@ -336,7 +350,7 @@ class EmailService {
             <p>Welcome aboard! Your account has been successfully created and you're now part of our School Management System community.</p>
             
             <div class="credentials">
-              <h3>📋 Your Account Details:</h3>
+              <h3>Your Account Details:</h3>
               <div class="cred-item"><strong>Username:</strong> ${username}</div>
               <div class="cred-item"><strong>Email:</strong> ${recipientEmail}</div>
               <div class="cred-item"><strong>Role:</strong> ${role.charAt(0).toUpperCase() + role.slice(1)}</div>
@@ -389,12 +403,12 @@ The School Management Team
   }
 
   /**
-   * Send password reset email (same interface, enhanced template)
+   * Send password reset email
    */
   async sendPasswordResetEmail(resetData, recipientEmail) {
     const { resetLink, name } = resetData;
 
-    const subject = "🔑 Password Reset - School Management System";
+    const subject = "Password Reset - School Management System";
 
     const html = `
       <!DOCTYPE html>
@@ -499,7 +513,7 @@ The School Management Team
             </div>
             
             <div class="warning">
-              <h4>⚠️ Important Security Information:</h4>
+              <h4>Important Security Information:</h4>
               <ul>
                 <li>This reset link expires in <strong>1 hour</strong></li>
                 <li>If you didn't request this reset, please ignore this email</li>
@@ -551,13 +565,13 @@ The School Management Team
   }
 
   /**
-   * Send email verification email - ADDED METHOD FOR AUTH CONTROLLER COMPATIBILITY
+   * Send email verification email
    */
   async sendEmailVerification(userData, recipientEmail, verificationToken) {
     const { name, firstName } = userData;
     const verificationLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/verify-email/${verificationToken}`;
 
-    const subject = "📧 Verify Your Email - School Management System";
+    const subject = "Verify Your Email - School Management System";
 
     const html = `
       <!DOCTYPE html>
@@ -650,7 +664,7 @@ The School Management Team
       <body>
         <div class="container">
           <div class="header">
-            <h1>📧 Verify Your Email Address</h1>
+            <h1>Verify Your Email Address</h1>
           </div>
           <div class="content">
             <p>Hello <strong>${firstName || name}</strong>,</p>
@@ -664,7 +678,7 @@ The School Management Team
             </div>
             
             <div class="verification-info">
-              <h4>📋 Verification Details:</h4>
+              <h4>Verification Details:</h4>
               <ul>
                 <li>This verification link expires in <strong>24 hours</strong></li>
                 <li>You must verify your email before you can log in</li>
@@ -716,10 +730,10 @@ The School Management Team
   }
 
   /**
-   * Send test email (same interface)
+   * Send test email
    */
   async sendTestEmail(recipientEmail) {
-    const subject = "✅ Test Email - School Management System";
+    const subject = "Test Email - School Management System";
 
     const html = `
       <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
@@ -734,22 +748,22 @@ The School Management Team
           <p style="color: #4b5563; font-size: 16px;">This is a test email from your School Management System email service.</p>
           
           <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 25px; border-left: 4px solid #10b981; margin: 30px 0; border-radius: 8px;">
-            <h3 style="color: #065f46; margin: 0 0 15px 0;">📊 Service Status:</h3>
+            <h3 style="color: #065f46; margin: 0 0 15px 0;">Service Status:</h3>
             <p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Mode:</strong> ${this.mode}</p>
             <p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Configured:</strong> ${this.isConfigured ? "Yes" : "No"}</p>
-            <p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Provider:</strong> Gmail SMTP</p>
+            <p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Provider:</strong> Brevo API</p>
             <p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Time:</strong> ${new Date().toISOString()}</p>
             ${this.mode === "mock" ? `<p style="margin: 5px 0; color: #064e3b; font-family: 'Courier New', monospace;"><strong>Mock Reason:</strong> ${this.initError}</p>` : ""}
           </div>
           
           <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 8px;">
-            <p style="color: #059669; font-weight: bold; font-size: 18px; margin: 0;">🎉 Email service is working perfectly!</p>
+            <p style="color: #059669; font-weight: bold; font-size: 18px; margin: 0;">Email service is working perfectly!</p>
           </div>
           
           <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 40px;">
             <p style="color: #9ca3af; font-size: 14px; margin: 0;">
-              Sent from School Management System<br>
-              <strong>From:</strong> ${process.env.GMAIL_USER || "Not configured"}
+              Sent from School Management System via Brevo<br>
+              <strong>From:</strong> ${process.env.EMAIL_FROM || "Not configured"}
             </p>
           </div>
         </div>
@@ -762,14 +776,14 @@ Email Service Test - School Management System
 Service Status:
 - Mode: ${this.mode}
 - Configured: ${this.isConfigured ? "Yes" : "No"}  
-- Provider: Gmail SMTP
+- Provider: Brevo API
 - Time: ${new Date().toISOString()}
 ${this.mode === "mock" ? `- Mock Reason: ${this.initError}` : ""}
 
-🎉 Email service is working perfectly!
+Email service is working perfectly!
 
-Sent from School Management System
-From: ${process.env.GMAIL_USER || "Not configured"}
+Sent from School Management System via Brevo
+From: ${process.env.EMAIL_FROM || "Not configured"}
     `;
 
     return this.sendEmail({
@@ -791,14 +805,16 @@ From: ${process.env.GMAIL_USER || "Not configured"}
   }
 
   /**
-   * Get service status (same interface)
+   * Get service status
    */
   getStatus() {
     return {
       configured: this.isConfigured,
       mode: this.mode,
-      hasGmailCredentials: !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD),
-      gmailUser: process.env.GMAIL_USER || "Not configured",
+      hasBrevoApiKey: !!this.brevoApiKey,
+      brevoApiKeyPrefix: this.brevoApiKey
+        ? this.brevoApiKey.substring(0, 10) + "..."
+        : "Not configured",
       initError: this.initError,
       environment: {
         NODE_ENV: process.env.NODE_ENV,

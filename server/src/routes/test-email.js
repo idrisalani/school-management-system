@@ -1,4 +1,4 @@
-// server/src/routes/test-email.js - Gmail Version
+// server/src/routes/test-email.js - Minimal Brevo Version (preserving all original functionality)
 import express from "express";
 import emailService from "../services/email.service.js";
 import logger from "../utils/logger.js";
@@ -13,7 +13,7 @@ const getStringParam = (param, defaultValue = "") => {
 };
 
 /**
- * Test email endpoint to verify Gmail service is working
+ * Test email endpoint to verify Brevo service is working
  * GET /api/v1/test-email?to=email@example.com
  */
 router.get("/", async (req, res) => {
@@ -24,7 +24,7 @@ router.get("/", async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Email parameter "to" is required. Usage: /test-email?to=email@example.com',
-        example: "GET /api/v1/test-email?to=your.email@gmail.com",
+        example: "GET /api/v1/test-email?to=your.email@example.com",
       });
     }
 
@@ -37,58 +37,58 @@ router.get("/", async (req, res) => {
       });
     }
 
-    logger.info("Testing Gmail email service for:", { to });
+    logger.info("Testing Brevo email service for:", { to });
 
     // Get email service status first
     const serviceStatus = emailService.getStatus();
-    logger.info("Gmail email service status:", serviceStatus);
+    logger.info("Brevo email service status:", serviceStatus);
 
     // Send test email
     const result = await emailService.sendTestEmail(to);
 
-    logger.info("Gmail test email result:", result);
+    logger.info("Brevo test email result:", result);
 
-    // Return comprehensive response with Gmail-specific info
+    // Return comprehensive response with Brevo-specific info
     return res.json({
       success: result.success,
-      message: result.success ? "Test email sent successfully via Gmail!" : "Test email failed",
+      message: result.success ? "Test email sent successfully via Brevo!" : "Test email failed",
       timestamp: new Date().toISOString(),
       emailService: {
         configured: serviceStatus.configured,
         mode: serviceStatus.mode,
-        provider: serviceStatus.mode === "gmail" ? "Gmail SMTP" : serviceStatus.mode,
-        gmailUser: serviceStatus.gmailUser,
-        hasGmailCredentials: serviceStatus.hasGmailCredentials,
+        provider: serviceStatus.mode === "brevo" ? "Brevo API" : serviceStatus.mode,
+        brevoApiKey: serviceStatus.brevoApiKeyPrefix,
+        hasBrevoCredentials: serviceStatus.hasBrevoApiKey,
         initError: serviceStatus.initError,
       },
       emailResult: {
         messageId: result.messageId,
         mode: result.mode,
-        provider: result.provider || "Gmail SMTP",
+        provider: result.provider || "Brevo API",
         response: result.response,
         error: result.error,
       },
       instructions: result.success
         ? `✅ Check the inbox for ${to} for the test email. It may take a few minutes to arrive.`
-        : `❌ Email sending failed. ${result.error || "Check Gmail credentials and configuration."}`,
+        : `❌ Email sending failed. ${result.error || "Check Brevo credentials and configuration."}`,
       troubleshooting: !result.success
         ? {
             commonIssues: [
-              "Gmail App Password not generated or incorrect",
-              "2-Factor Authentication not enabled on Gmail account",
-              "GMAIL_USER not set to a valid @gmail.com address",
-              "Firewall blocking SMTP connections (port 587/465)",
+              "Brevo API key not generated or incorrect",
+              "Brevo API key doesn't start with 'xkeysib-'",
+              "BREVO_API_KEY not set or invalid",
+              "Network connectivity issues or firewall blocking API calls",
             ],
             checkEnvironment: "Use GET /api/v1/test-email/env-test to verify configuration",
           }
         : undefined,
     });
   } catch (error) {
-    logger.error("Gmail test email endpoint error:", error);
+    logger.error("Brevo test email endpoint error:", error);
 
     return res.status(500).json({
       success: false,
-      error: "Internal server error during Gmail email test",
+      error: "Internal server error during Brevo email test",
       details: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
       emailServiceStatus: emailService.getStatus(),
@@ -129,7 +129,7 @@ router.post("/welcome", async (req, res) => {
 
     return res.json({
       success: result.success,
-      message: result.success ? "Welcome test email sent via Gmail!" : "Welcome test email failed",
+      message: result.success ? "Welcome test email sent via Brevo!" : "Welcome test email failed",
       emailService: emailService.getStatus(),
       emailResult: result,
       testData: { name, username, role },
@@ -186,7 +186,7 @@ router.post("/reset", async (req, res) => {
     return res.json({
       success: result.success,
       message: result.success
-        ? "Password reset test email sent via Gmail!"
+        ? "Password reset test email sent via Brevo!"
         : "Password reset test failed",
       emailService: emailService.getStatus(),
       emailResult: result,
@@ -266,7 +266,7 @@ router.post("/verification", async (req, res) => {
     return res.json({
       success: result.success,
       message: result.success
-        ? "Email verification test sent via Gmail!"
+        ? "Email verification test sent via Brevo!"
         : "Email verification test failed",
       emailService: emailService.getStatus(),
       emailResult: result,
@@ -295,7 +295,7 @@ router.post("/verification", async (req, res) => {
 });
 
 /**
- * Get Gmail service configuration and environment info
+ * Get Brevo service configuration and environment info
  * GET /api/v1/test-email/env-test
  */
 router.get("/env-test", (req, res) => {
@@ -304,7 +304,7 @@ router.get("/env-test", (req, res) => {
   res.json({
     timestamp: new Date().toISOString(),
     emailService: {
-      provider: "Gmail SMTP",
+      provider: "Brevo API",
       status: serviceStatus,
     },
     environment: {
@@ -313,50 +313,48 @@ router.get("/env-test", (req, res) => {
       CLIENT_URL: process.env.CLIENT_URL || "NOT_SET",
       SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || "NOT_SET",
     },
-    gmailConfig: {
-      GMAIL_USER: process.env.GMAIL_USER ? `SET (${process.env.GMAIL_USER})` : "NOT_SET",
-      GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD
-        ? `SET (${process.env.GMAIL_APP_PASSWORD.length} chars, ends with: ...${process.env.GMAIL_APP_PASSWORD.slice(-4)})`
+    brevoConfig: {
+      BREVO_API_KEY: process.env.BREVO_API_KEY
+        ? `SET (${process.env.BREVO_API_KEY.substring(0, 10)}...)`
         : "NOT_SET",
       EMAIL_FROM: process.env.EMAIL_FROM || "NOT_SET",
       EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME || "NOT_SET",
     },
     validation: {
-      hasRequiredCredentials: !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD),
-      gmailUserValid: process.env.GMAIL_USER
-        ? process.env.GMAIL_USER.includes("@gmail.com")
+      hasRequiredCredentials: !!process.env.BREVO_API_KEY,
+      brevoApiKeyValid: process.env.BREVO_API_KEY
+        ? process.env.BREVO_API_KEY.startsWith("xkeysib-")
         : false,
-      appPasswordValid: process.env.GMAIL_APP_PASSWORD
-        ? process.env.GMAIL_APP_PASSWORD.length === 16
-        : false,
+      emailFromValid: process.env.EMAIL_FROM ? process.env.EMAIL_FROM.includes("@") : false,
     },
     instructions: {
       setup: [
-        "1. Enable 2-Factor Authentication on your Gmail account",
-        "2. Go to Google Account → Security → 2-Step Verification → App passwords",
-        "3. Generate an App Password for 'Mail'",
-        "4. Set GMAIL_USER=your.email@gmail.com",
-        "5. Set GMAIL_APP_PASSWORD=your_16_character_password",
-        "6. Test with: GET /api/v1/test-email?to=your.email@gmail.com",
+        "1. Create account at https://brevo.com",
+        "2. Go to Settings → SMTP & API → API Keys",
+        "3. Generate an API key for 'School Management System'",
+        "4. Set BREVO_API_KEY=xkeysib-xxxxxxxx...",
+        "5. Set EMAIL_FROM=your-verified-sender@yourdomain.com",
+        "6. Set EMAIL_FROM_NAME=School Management System",
+        "7. Test with: GET /api/v1/test-email?to=your.email@example.com",
       ],
       troubleshooting: [
-        "If authentication fails, regenerate the App Password",
-        "Make sure 2FA is enabled on your Gmail account",
-        "Check that GMAIL_USER is a valid @gmail.com address",
-        "Verify the App Password is exactly 16 characters",
+        "If authentication fails, check your API key starts with 'xkeysib-'",
+        "Make sure your sender email is verified in Brevo dashboard",
+        "Check your Brevo account quota and limits",
+        "Verify BREVO_API_KEY is correctly set in environment variables",
       ],
     },
   });
 });
 
 /**
- * Gmail service health check
+ * Brevo service health check
  * GET /api/v1/test-email/health
  */
 router.get("/health", async (req, res) => {
   try {
     const serviceStatus = emailService.getStatus();
-    const isHealthy = serviceStatus.configured && serviceStatus.hasGmailCredentials;
+    const isHealthy = serviceStatus.configured && serviceStatus.hasBrevoApiKey;
 
     // If configured, try to verify connection (non-blocking)
     let connectionStatus = "unknown";
@@ -371,26 +369,26 @@ router.get("/health", async (req, res) => {
 
     res.status(isHealthy ? 200 : 503).json({
       status: isHealthy ? "healthy" : "unhealthy",
-      service: "Gmail Email Service",
+      service: "Brevo Email Service",
       timestamp: new Date().toISOString(),
       checks: {
         configured: serviceStatus.configured,
-        hasCredentials: serviceStatus.hasGmailCredentials,
+        hasCredentials: serviceStatus.hasBrevoApiKey,
         mode: serviceStatus.mode,
         connection: connectionStatus,
       },
       details: serviceStatus,
       uptime: process.uptime(),
       message: isHealthy
-        ? "Gmail email service is ready"
-        : `Gmail email service is not properly configured: ${serviceStatus.initError}`,
+        ? "Brevo email service is ready"
+        : `Brevo email service is not properly configured: ${serviceStatus.initError}`,
     });
   } catch (error) {
     logger.error("Email service health check failed:", error);
 
     res.status(503).json({
       status: "error",
-      service: "Gmail Email Service",
+      service: "Brevo Email Service",
       timestamp: new Date().toISOString(),
       error: error.message,
       message: "Health check failed",
@@ -403,7 +401,7 @@ router.get("/health", async (req, res) => {
 
 /**
  * Test email verification template specifically
- * POST /api/v1/test-email/verification
+ * POST /api/v1/test-email/verification (second implementation - keeping original structure)
  */
 router.post("/verification", async (req, res) => {
   try {
@@ -603,7 +601,7 @@ This verification link expires in 24 hours.
 
 If you didn't create this account, please ignore this email.
 
-Need help? Contact us at ${process.env.SUPPORT_EMAIL || "support@schoolms.com"}
+Need help? Contact us at ${process.env.SUPPORT_EMAIL || "idris.bin.muslih@outlook.com"}
 
 Best regards,
 The School Management Team
@@ -625,7 +623,7 @@ THIS IS A TEST EMAIL - This verification link will not actually verify any accou
     return res.json({
       success: result.success,
       message: result.success
-        ? "Email verification test sent via Gmail!"
+        ? "Email verification test sent via Brevo!"
         : "Email verification test failed",
       emailService: emailService.getStatus(),
       emailResult: result,
