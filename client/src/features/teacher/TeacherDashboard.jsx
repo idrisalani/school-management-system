@@ -8,7 +8,7 @@ import {
 } from "../../services/dashboardApi.js";
 import DashboardOverview from "../../components/dashboard/DashboardOverview";
 // TODO: Create TeacherProfile component
-// import TeacherProfile from "./TeacherProfile";
+import TeacherProfile from "./TeacherProfile";
 
 // SVG Icon Components
 const Icons = {
@@ -322,30 +322,6 @@ const QuickSettingsCard = ({ onProfileClick }) => (
       </div>
     </CardContent>
   </Card>
-);
-
-// Placeholder TeacherProfile Component (to be created separately)
-const TeacherProfile = () => (
-  <div className="space-y-6">
-    <Card>
-      <CardHeader>
-        <CardTitle>Teacher Profile</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-center py-8">
-          <Icons.GraduationCap className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Teacher Profile Coming Soon
-          </h3>
-          <p className="text-gray-500">
-            The comprehensive teacher profile management system is being
-            developed. This will include personal information, teaching
-            subjects, class assignments, and preferences.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
 );
 
 // Stats Card Component
