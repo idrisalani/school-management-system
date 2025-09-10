@@ -12,13 +12,13 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useAssignment } from "../hooks/useAssignment";
-import { useNotification } from "../../../../../components/ui/notification";
+import { useNotification } from "../../../../components/ui/notification";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "../../../../../components/ui/dialog";
+} from "../../../../components/ui/dialog";
 
 /**
  * @typedef {object} Assignment

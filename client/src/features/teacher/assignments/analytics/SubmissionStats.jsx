@@ -6,7 +6,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../components/ui/card";
+} from "../../../../components/ui/card";
 import { useAnalytics } from "../hooks/useAnalytics";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];

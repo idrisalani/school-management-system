@@ -1,5 +1,5 @@
 // @ts-nocheck
-// client/src/features/teacher/TeacherDashboard.jsx - Enhanced with Profile/Settings Navigation
+// client/src/features/teacher/TeacherDashboard.jsx - Enhanced with Assignment & Class Management
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import {
@@ -7,8 +7,17 @@ import {
   getUserDisplayName,
 } from "../../services/dashboardApi.js";
 import DashboardOverview from "../../components/dashboard/DashboardOverview";
-// TODO: Create TeacherProfile component
 import TeacherProfile from "./TeacherProfile";
+
+// Assignment Management Integration
+import AssignmentManagementSuite from "./assignments/Suite/AssignmentManagementSuite";
+import { AssignmentProvider } from "./assignments/context/AssignmentContext";
+import { GradingProvider } from "./assignments/context/GradingContext";
+//import AssignmentSystem from "./assignments/AssignmentSystem";
+
+// Class Management Integration
+import ClassManagement from "./ClassManagement";
+//import AssignmentManagement from "./components/AssignmentManagement";
 
 // SVG Icon Components
 const Icons = {
@@ -124,6 +133,16 @@ const Icons = {
       />
     </svg>
   ),
+  Plus: ({ className = "h-6 w-6", color = "currentColor" }) => (
+    <svg className={className} fill="none" stroke={color} viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+      />
+    </svg>
+  ),
 };
 
 // Card components
@@ -145,13 +164,23 @@ const CardContent = ({ children, className = "" }) => (
   <div className={`px-4 py-5 ${className}`}>{children}</div>
 );
 
-// Tab Navigation Component
+// Enhanced Tab Navigation Component
 const TabNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     {
       id: "dashboard",
       name: "Teaching Dashboard",
       icon: Icons.Home,
+    },
+    {
+      id: "assignments",
+      name: "Assignment Management",
+      icon: Icons.ClipboardList,
+    },
+    {
+      id: "classes",
+      name: "Class Management",
+      icon: Icons.Users,
     },
     {
       id: "profile",
@@ -276,13 +305,80 @@ const UserMenuDropdown = ({
   );
 };
 
+// Assignment Quick Actions Card Component
+const AssignmentQuickActions = ({
+  onCreateAssignment,
+  onViewGrading,
+  onManageAssignments,
+}) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center space-x-2">
+        <Icons.ClipboardList className="h-5 w-5" />
+        <span>Assignment Actions</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-3">
+        <button
+          onClick={onCreateAssignment}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Icons.Plus className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Create Assignment</p>
+              <p className="text-sm text-gray-500">Start new assignment</p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+
+        <button
+          onClick={onViewGrading}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Icons.ClipboardList className="h-4 w-4 text-green-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Grade Submissions</p>
+              <p className="text-sm text-gray-500">Review and grade work</p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+
+        <button
+          onClick={onManageAssignments}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Icons.BookOpen className="h-4 w-4 text-purple-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Manage All</p>
+              <p className="text-sm text-gray-500">View all assignments</p>
+            </div>
+          </div>
+          <span className="text-gray-400">→</span>
+        </button>
+      </div>
+    </CardContent>
+  </Card>
+);
+
 // Quick Settings Card Component
-const QuickSettingsCard = ({ onProfileClick }) => (
+const QuickSettingsCard = ({ onProfileClick, onManageClasses }) => (
   <Card>
     <CardHeader>
       <CardTitle className="flex items-center space-x-2">
         <Icons.Settings className="h-5 w-5" />
-        <span>Teacher Settings</span>
+        <span>Quick Settings</span>
       </CardTitle>
     </CardHeader>
     <CardContent>
@@ -297,24 +393,23 @@ const QuickSettingsCard = ({ onProfileClick }) => (
             </div>
             <div className="text-left">
               <p className="font-medium text-gray-900">Profile Settings</p>
-              <p className="text-sm text-gray-500">
-                Update your teaching profile
-              </p>
+              <p className="text-sm text-gray-500">Update your profile</p>
             </div>
           </div>
           <span className="text-gray-400">→</span>
         </button>
 
-        <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <button
+          onClick={onManageClasses}
+          className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-100 rounded-lg">
-              <Icons.ClipboardList className="h-4 w-4 text-blue-600" />
+              <Icons.Users className="h-4 w-4 text-blue-600" />
             </div>
             <div className="text-left">
               <p className="font-medium text-gray-900">Class Management</p>
-              <p className="text-sm text-gray-500">
-                Manage your classes and students
-              </p>
+              <p className="text-sm text-gray-500">Manage classes</p>
             </div>
           </div>
           <span className="text-gray-400">→</span>
@@ -372,6 +467,8 @@ const TeacherDashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     totalStudents: "0",
     totalClasses: "0",
+    activeAssignments: "0",
+    pendingGrades: "0",
     averageGrade: "N/A",
     attendanceRate: "0%",
   });
@@ -412,10 +509,12 @@ const TeacherDashboard = () => {
     [logout, isLoggingOut]
   );
 
-  // Profile navigation handler
-  const handleProfileClick = () => {
-    setActiveTab("profile");
-  };
+  // Navigation handlers
+  const handleProfileClick = () => setActiveTab("profile");
+  const handleCreateAssignment = () => setActiveTab("assignments");
+  const handleViewGrading = () => setActiveTab("assignments");
+  const handleManageAssignments = () => setActiveTab("assignments");
+  const handleManageClasses = () => setActiveTab("classes");
 
   // Fetch teacher dashboard data
   useEffect(() => {
@@ -432,10 +531,12 @@ const TeacherDashboard = () => {
         console.error("Failed to fetch teacher dashboard data:", error);
         setError("Failed to load teacher data. Please check your connection.");
 
-        // Fallback data
+        // Enhanced fallback data with assignment info
         setDashboardData({
           totalStudents: "85",
           totalClasses: "6",
+          activeAssignments: "12",
+          pendingGrades: "23",
           averageGrade: "B+",
           attendanceRate: "94%",
         });
@@ -447,6 +548,7 @@ const TeacherDashboard = () => {
     fetchTeacherData();
   }, [user?.id]);
 
+  // Enhanced stats with assignment data
   const stats = [
     {
       title: "Total Students",
@@ -457,28 +559,28 @@ const TeacherDashboard = () => {
       color: "blue",
     },
     {
-      title: "Classes Teaching",
-      value: isLoading ? "..." : dashboardData.totalClasses,
-      change: "+1",
+      title: "Active Assignments",
+      value: isLoading ? "..." : dashboardData.activeAssignments,
+      change: "+2",
       trend: "up",
-      IconComponent: Icons.GraduationCap,
+      IconComponent: Icons.ClipboardList,
       color: "green",
     },
     {
-      title: "Class Average Grade",
-      value: isLoading ? "..." : dashboardData.averageGrade,
-      change: "+0.3",
-      trend: "up",
-      IconComponent: Icons.ClipboardList,
-      color: "purple",
-    },
-    {
-      title: "Attendance Rate",
-      value: isLoading ? "..." : dashboardData.attendanceRate,
-      change: "-1.2%",
+      title: "Pending Grades",
+      value: isLoading ? "..." : dashboardData.pendingGrades,
+      change: "-5",
       trend: "down",
       IconComponent: Icons.Clock,
       color: "orange",
+    },
+    {
+      title: "Class Average",
+      value: isLoading ? "..." : dashboardData.averageGrade,
+      change: "+0.3",
+      trend: "up",
+      IconComponent: Icons.GraduationCap,
+      color: "purple",
     },
   ];
 
@@ -554,7 +656,7 @@ const TeacherDashboard = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
+      {/* Enhanced Tab Navigation */}
       <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Tab Content */}
@@ -566,43 +668,54 @@ const TeacherDashboard = () => {
               <DashboardOverview userRole={user?.role} userId={user?.id} />
             </div>
 
-            {/* Teacher Stats */}
+            {/* Enhanced Teacher Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {stats.map((stat) => (
                 <StatsCard key={stat.title} {...stat} loading={isLoading} />
               ))}
             </div>
 
-            {/* Main Content */}
+            {/* Enhanced Main Content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Assignment Quick Actions */}
+              <AssignmentQuickActions
+                onCreateAssignment={handleCreateAssignment}
+                onViewGrading={handleViewGrading}
+                onManageAssignments={handleManageAssignments}
+              />
+
               {/* Classes Overview */}
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <Icons.BookOpen className="h-5 w-5" />
-                      <span>My Classes</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8">
-                      <Icons.GraduationCap className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        Class Management
-                      </h3>
-                      <p className="text-gray-500 mb-4">
-                        Detailed class management features coming soon
-                      </p>
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        View All Classes
-                      </button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Icons.BookOpen className="h-5 w-5" />
+                    <span>My Classes</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8">
+                    <Icons.GraduationCap className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      Class Management
+                    </h3>
+                    <p className="text-gray-500 mb-4">
+                      Manage your classes and students
+                    </p>
+                    <button
+                      onClick={handleManageClasses}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      View All Classes
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Quick Settings */}
-              <QuickSettingsCard onProfileClick={handleProfileClick} />
+              <QuickSettingsCard
+                onProfileClick={handleProfileClick}
+                onManageClasses={handleManageClasses}
+              />
             </div>
 
             {/* Data Source Indicator */}
@@ -614,6 +727,22 @@ const TeacherDashboard = () => {
               </p>
             </div>
           </>
+        )}
+
+        {activeTab === "assignments" && (
+          <AssignmentProvider teacherId={user?.id}>
+            <GradingProvider>
+              <div className="space-y-6">
+                <AssignmentManagementSuite />
+              </div>
+            </GradingProvider>
+          </AssignmentProvider>
+        )}
+
+        {activeTab === "classes" && (
+          <div className="space-y-6">
+            <ClassManagement />
+          </div>
         )}
 
         {activeTab === "profile" && (

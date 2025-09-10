@@ -4,10 +4,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 // Import assignment components
-import GradingWizard from "../features/teacher/components/assignments/Workflow/GradingWizard";
-import RubricBuilder from "../features/teacher/components/assignments/shared/RubricBuilder";
-import SubmissionCard from "../features/teacher/components/assignments/shared/SubmissionCard";
-import CommentThread from "../features/teacher/components/assignments/shared/CommentThread";
+import GradingWizard from "../features/teacher/assignments/Workflow/GradingWizard";
+import RubricBuilder from "../features/teacher/assignments/shared/RubricBuilder";
+import SubmissionCard from "../features/teacher/assignments/shared/SubmissionCard";
+import CommentThread from "../features/teacher/assignments/shared/CommentThread";
 
 // Import services
 import api from "../services/api";

@@ -2,21 +2,21 @@
 import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Check, Download, Eye } from "lucide-react";
-import Button from "../../../../../components/ui/button";
+import Button from "../../../../components/ui/button";
 // import Input from '../../../../../components/ui/input';
 // import Textarea from '../../../../../components/ui/textarea';
 import {
   Alert,
   AlertTitle,
   AlertDescription,
-} from "../../../../../components/ui/alert";
-import Badge from "../../../../../components/ui/badge";
+} from "../../../../components/ui/alert";
+import Badge from "../../../../components/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../components/ui/card";
+} from "../../../../components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,7 @@ import {
   DialogFooter,
   DialogTitle,
   DialogDescription,
-} from "../../../../../components/ui/dialog";
+} from "../../../../components/ui/dialog";
 
 /**
  * @typedef {object} Attachment

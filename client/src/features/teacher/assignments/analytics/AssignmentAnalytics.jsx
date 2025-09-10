@@ -6,13 +6,13 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../components/ui/card";
+} from "../../../../components/ui/card";
 import {
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
-} from "../../../../../components/ui/tabs";
+} from "../../../../components/ui/tabs";
 
 /**
  * Main analytics dashboard for assignments

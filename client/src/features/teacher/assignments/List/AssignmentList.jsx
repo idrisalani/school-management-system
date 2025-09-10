@@ -5,7 +5,7 @@ import { Plus, Calendar, Users, CheckCircle } from "lucide-react";
 import { useAssignment } from "../hooks/useAssignment";
 import AssignmentFilters from "./AssignmentFilters";
 import AssignmentBulkActions from "./AssignmentBulkActions";
-import { Card } from "../../../../../components/ui/card";
+import { Card } from "../../../../components/ui/card";
 import PropTypes from "prop-types";
 import { toFullAssignment, toBulkActionAssignment } from "../types";
 
