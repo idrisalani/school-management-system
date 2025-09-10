@@ -17,7 +17,13 @@ import {
 
 // Components
 import AssignmentList from "../List/AssignmentList";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+// import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../components/ui/card";
 import { useAssignment } from "../hooks/useAssignment";
 import { useAnalytics } from "../hooks/useAnalytics";
 
@@ -152,9 +158,9 @@ const AssignmentManagementSuite = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-medium text-gray-500">
+            <CardTitle className="text-sm font-medium text-gray-500">
               Completion Rate
-            </h3>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
@@ -171,7 +177,9 @@ const AssignmentManagementSuite = () => {
 
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-medium text-gray-500">Average Grade</h3>
+            <CardTitle className="text-sm font-medium text-gray-500">
+              Average Grade
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
@@ -188,9 +196,9 @@ const AssignmentManagementSuite = () => {
 
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-medium text-gray-500">
+            <CardTitle className="text-sm font-medium text-gray-500">
               Late Submissions
-            </h3>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
@@ -210,9 +218,9 @@ const AssignmentManagementSuite = () => {
       {analyticsData?.chartData && (
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-medium text-gray-900">
+            <CardTitle className="text-lg font-medium text-gray-900">
               Performance Trends
-            </h3>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center justify-center text-gray-500">
@@ -243,9 +251,9 @@ const AssignmentManagementSuite = () => {
             className="hover:shadow-md transition-shadow"
           >
             <CardHeader>
-              <h3 className="font-medium text-gray-900">
+              <CardTitle className="font-medium text-gray-900">
                 {assignment.title || "Untitled Assignment"}
-              </h3>
+              </CardTitle>
               <p className="text-sm text-gray-500">
                 {assignment.subject || "No Subject"}
               </p>
