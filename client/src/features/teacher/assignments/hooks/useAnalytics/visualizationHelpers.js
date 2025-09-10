@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 //teacher/components/assignments/hooks/useAnalytics/visualizationHelpers.js
-import { statisticalAnalysis } from "./statisticalAnalysis";
+import { statisticalAnalysis } from "./statisticalAnalysis.js";
 
 export const visualizationHelpers = {
   // Color Schemes

@@ -2,10 +2,10 @@
 
 // client/src/features/teacher/components/assignments/hooks/useAnalytics.js
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { statisticalAnalysis } from "./useAnalytics/statisticalAnalysis";
-import { visualizationHelpers } from "./useAnalytics/visualizationHelpers";
-import { exportHandlers } from "./useAnalytics/exportHandlers";
-import { AnalyticsCache } from "./useAnalytics/cacheManager";
+import { statisticalAnalysis } from "./useAnalytics/statisticalAnalysis.js";
+import { visualizationHelpers } from "./useAnalytics/visualizationHelpers.js";
+import { exportHandlers } from "./useAnalytics/exportHandlers.js";
+import { AnalyticsCache } from "./useAnalytics/cacheManager.js";
 
 export const useAnalytics = (assignmentId = null) => {
   const [analyticsData, setAnalyticsData] = useState(null);
