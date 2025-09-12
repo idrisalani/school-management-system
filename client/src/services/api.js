@@ -1,6 +1,7 @@
-// @ts-check
+// @ts-nocheck
 import { useState } from "react";
 import axios from "axios";
+import demoDataService from "./demoDataService.js"; // Import demo service
 
 /**
  * @typedef {object} QueryParams
@@ -82,7 +83,50 @@ import axios from "axios";
  */
 
 /**
- * Creates an axios instance with extended functionality
+ * Check if currently in demo mode
+ * @returns {boolean} Whether demo mode is active
+ */
+const isDemoMode = () => {
+  // Check if we're on a demo path or demo mode is stored in sessionStorage
+  const demoPath = window.location.pathname.startsWith("/demo");
+  const demoSession = sessionStorage.getItem("demo_mode") === "true";
+  return demoPath || demoSession;
+};
+
+/**
+ * Create a mock AxiosResponse from demo data
+ * @param {any} data - Demo response data
+ * @returns {Promise<AxiosApiResponse>} Mock axios response
+ */
+const createMockAxiosResponse = async (data) => {
+  const demoResponse = await data;
+  // @ts-ignore - Creating mock response for demo mode
+  return {
+    data: demoResponse.data || demoResponse,
+    status: demoResponse.statusCode || 200,
+    statusText: "OK",
+    headers: {},
+    config: {
+      method: "get",
+      url: "/demo",
+      headers: {},
+    },
+    request: {},
+  };
+};
+
+/**
+ * Route API call to demo or real service
+ * @param {Function} realApiCall - Real API function
+ * @param {Function} demoApiCall - Demo API function
+ * @returns {Promise<AxiosApiResponse>} API response
+ */
+const routeApiCall = (realApiCall, demoApiCall) => {
+  return isDemoMode() ? createMockAxiosResponse(demoApiCall()) : realApiCall();
+};
+
+/**
+ * Creates an axios instance with extended functionality and demo detection
  * @returns {object} Extended axios instance with API endpoints
  */
 const createApiInstance = () => {
@@ -104,6 +148,12 @@ const createApiInstance = () => {
      * @returns {import('axios').InternalAxiosRequestConfig} Modified configuration
      */
     (config) => {
+      // Skip real API calls if in demo mode
+      if (isDemoMode()) {
+        console.log(`🎭 Demo Mode: Skipping real API call to ${config.url}`);
+        return config;
+      }
+
       // Add authorization header to requests
       const token = localStorage.getItem("token");
       if (token && config.headers) {
@@ -246,14 +296,24 @@ const createApiInstance = () => {
      * @returns {Promise<AxiosApiResponse>} Upload response
      */
     upload: async (url, formData, config = {}) => {
-      return instance.post(url, formData, {
-        ...config,
-        headers: {
-          ...config.headers,
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: config.timeout || 60000, // Longer timeout for file uploads
-      });
+      return routeApiCall(
+        () =>
+          instance.post(url, formData, {
+            ...config,
+            headers: {
+              ...config.headers,
+              "Content-Type": "multipart/form-data",
+            },
+            timeout: config.timeout || 60000, // Longer timeout for file uploads
+          }),
+        () =>
+          demoDataService.mockResponse(
+            {
+              url: `https://demo.edu/uploads/${Date.now()}.jpg`,
+            },
+            "File uploaded successfully"
+          )
+      );
     },
 
     /**
@@ -264,6 +324,18 @@ const createApiInstance = () => {
      * @returns {Promise<AxiosApiResponse>} Download response
      */
     download: async (url, filename, config = {}) => {
+      if (isDemoMode()) {
+        // Simulate download in demo mode
+        await demoDataService.simulateDelay(1000);
+        console.log(`🎭 Demo: Would download ${filename} from ${url}`);
+        return demoDataService.mockResponse(
+          {
+            downloadUrl: `https://demo.edu/downloads/${filename}`,
+          },
+          "Download ready (demo mode)"
+        );
+      }
+
       try {
         const response = await instance.get(url, {
           ...config,
@@ -294,22 +366,36 @@ const createApiInstance = () => {
     ...instance,
     ...fileOperations,
 
+    // Demo utilities
+    isDemoMode,
+    getDemoWarning: () =>
+      isDemoMode() ? demoDataService.getDemoWarning() : null,
+
     // Health check endpoints
     health: {
       /**
        * Check API health status
        * @returns {Promise<AxiosApiResponse>} Health check response
        */
-      check: () => instance.get("/health"),
+      check: () =>
+        routeApiCall(
+          () => instance.get("/health"),
+          () => demoDataService.mockResponse({ status: "ok", mode: "demo" })
+        ),
 
       /**
        * Test database connection
        * @returns {Promise<AxiosApiResponse>} Database test response
        */
-      dbTest: () => instance.get("/db-test"),
+      dbTest: () =>
+        routeApiCall(
+          () => instance.get("/db-test"),
+          () =>
+            demoDataService.mockResponse({ status: "connected", mode: "demo" })
+        ),
     },
 
-    // Enhanced authentication endpoints
+    // Enhanced authentication endpoints (always use real API for auth)
     auth: {
       /**
        * Authenticate user with email or username
@@ -340,12 +426,6 @@ const createApiInstance = () => {
       /**
        * Register new user
        * @param {object} userData - User registration data
-       * @property {string} userData.email - User's email address
-       * @property {string} userData.password - User's password
-       * @property {string} userData.firstName - User's first name
-       * @property {string} userData.lastName - User's last name
-       * @property {string} [userData.username] - User's username
-       * @property {string} userData.role - User's role (student, teacher, admin)
        * @returns {Promise<AxiosApiResponse>} Registration response
        */
       register: (userData) => {
@@ -438,21 +518,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Users list response
        */
-      getAll: (params) => instance.get("/users", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/users", { params }),
+          () => demoDataService.users.getAll(params)
+        ),
 
       /**
        * Get user by ID
        * @param {string} id - User identifier
        * @returns {Promise<AxiosApiResponse>} User details response
        */
-      getById: (id) => instance.get(`/users/${id}`),
+      getById: (id) =>
+        routeApiCall(
+          () => instance.get(`/users/${id}`),
+          () => demoDataService.users.getById(id)
+        ),
 
       /**
        * Create new user
        * @param {object} data - User data
        * @returns {Promise<AxiosApiResponse>} Created user response
        */
-      create: (data) => instance.post("/users", data),
+      create: (data) =>
+        routeApiCall(
+          () => instance.post("/users", data),
+          () => demoDataService.users.create(data)
+        ),
 
       /**
        * Update existing user
@@ -460,14 +552,22 @@ const createApiInstance = () => {
        * @param {object} data - Updated user data
        * @returns {Promise<AxiosApiResponse>} Updated user response
        */
-      update: (id, data) => instance.put(`/users/${id}`, data),
+      update: (id, data) =>
+        routeApiCall(
+          () => instance.put(`/users/${id}`, data),
+          () => demoDataService.users.update(id, data)
+        ),
 
       /**
        * Delete user
        * @param {string} id - User identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (id) => instance.delete(`/users/${id}`),
+      delete: (id) =>
+        routeApiCall(
+          () => instance.delete(`/users/${id}`),
+          () => demoDataService.users.delete(id)
+        ),
 
       /**
        * Get users by role
@@ -476,7 +576,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Users by role response
        */
       getByRole: (role, params) =>
-        instance.get(`/users/role/${role}`, { params }),
+        routeApiCall(
+          () => instance.get(`/users/role/${role}`, { params }),
+          () => demoDataService.users.getByRole(role, params)
+        ),
 
       /**
        * Update user profile
@@ -485,7 +588,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated profile response
        */
       updateProfile: (id, profileData) =>
-        instance.patch(`/users/${id}/profile`, profileData),
+        routeApiCall(
+          () => instance.patch(`/users/${id}/profile`, profileData),
+          () => demoDataService.users.updateProfile(id, profileData)
+        ),
 
       /**
        * Upload user avatar
@@ -493,11 +599,15 @@ const createApiInstance = () => {
        * @param {File} file - Avatar image file
        * @returns {Promise<AxiosApiResponse>} Avatar upload response
        */
-      uploadAvatar: (id, file) => {
-        const formData = new FormData();
-        formData.append("avatar", file);
-        return fileOperations.upload(`/users/${id}/avatar`, formData);
-      },
+      uploadAvatar: (id, file) =>
+        routeApiCall(
+          () => {
+            const formData = new FormData();
+            formData.append("avatar", file);
+            return fileOperations.upload(`/users/${id}/avatar`, formData);
+          },
+          () => demoDataService.users.uploadAvatar(id, file)
+        ),
     },
 
     classes: {
@@ -506,21 +616,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Classes list response
        */
-      getAll: (params) => instance.get("/classes", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/classes", { params }),
+          () => demoDataService.classes.getAll(params)
+        ),
 
       /**
        * Get class by ID
        * @param {string} id - Class identifier
        * @returns {Promise<AxiosApiResponse>} Class details response
        */
-      getById: (id) => instance.get(`/classes/${id}`),
+      getById: (id) =>
+        routeApiCall(
+          () => instance.get(`/classes/${id}`),
+          () => demoDataService.classes.getById(id)
+        ),
 
       /**
        * Create new class
        * @param {object} data - Class data
        * @returns {Promise<AxiosApiResponse>} Created class response
        */
-      create: (data) => instance.post("/classes", data),
+      create: (data) =>
+        routeApiCall(
+          () => instance.post("/classes", data),
+          () => demoDataService.classes.create(data)
+        ),
 
       /**
        * Update existing class
@@ -528,21 +650,33 @@ const createApiInstance = () => {
        * @param {object} data - Updated class data
        * @returns {Promise<AxiosApiResponse>} Updated class response
        */
-      update: (id, data) => instance.put(`/classes/${id}`, data),
+      update: (id, data) =>
+        routeApiCall(
+          () => instance.put(`/classes/${id}`, data),
+          () => demoDataService.classes.update(id, data)
+        ),
 
       /**
        * Delete class
        * @param {string} id - Class identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (id) => instance.delete(`/classes/${id}`),
+      delete: (id) =>
+        routeApiCall(
+          () => instance.delete(`/classes/${id}`),
+          () => demoDataService.classes.delete(id)
+        ),
 
       /**
        * Get students in class
        * @param {string} classId - Class identifier
        * @returns {Promise<AxiosApiResponse>} Class students response
        */
-      getStudents: (classId) => instance.get(`/classes/${classId}/students`),
+      getStudents: (classId) =>
+        routeApiCall(
+          () => instance.get(`/classes/${classId}/students`),
+          () => demoDataService.classes.getStudents(classId)
+        ),
 
       /**
        * Add student to class
@@ -551,7 +685,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Add student response
        */
       addStudent: (classId, studentId) =>
-        instance.post(`/classes/${classId}/students`, { studentId }),
+        routeApiCall(
+          () => instance.post(`/classes/${classId}/students`, { studentId }),
+          () => demoDataService.classes.addStudent(classId, studentId)
+        ),
 
       /**
        * Remove student from class
@@ -560,14 +697,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Remove student response
        */
       removeStudent: (classId, studentId) =>
-        instance.delete(`/classes/${classId}/students/${studentId}`),
+        routeApiCall(
+          () => instance.delete(`/classes/${classId}/students/${studentId}`),
+          () => demoDataService.classes.removeStudent(classId, studentId)
+        ),
 
       /**
        * Get teachers assigned to class
        * @param {string} classId - Class identifier
        * @returns {Promise<AxiosApiResponse>} Class teachers response
        */
-      getTeachers: (classId) => instance.get(`/classes/${classId}/teachers`),
+      getTeachers: (classId) =>
+        routeApiCall(
+          () => instance.get(`/classes/${classId}/teachers`),
+          () => demoDataService.classes.getTeachers(classId)
+        ),
 
       /**
        * Assign teacher to class
@@ -577,7 +721,15 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Assign teacher response
        */
       assignTeacher: (classId, teacherId, subjectId) =>
-        instance.post(`/classes/${classId}/teachers`, { teacherId, subjectId }),
+        routeApiCall(
+          () =>
+            instance.post(`/classes/${classId}/teachers`, {
+              teacherId,
+              subjectId,
+            }),
+          () =>
+            demoDataService.classes.assignTeacher(classId, teacherId, subjectId)
+        ),
     },
 
     assignments: {
@@ -586,21 +738,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Assignments list response
        */
-      getAll: (params) => instance.get("/assignments", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/assignments", { params }),
+          () => demoDataService.assignments.getAll(params)
+        ),
 
       /**
        * Get assignment by ID
        * @param {string} assignmentId - Assignment identifier
        * @returns {Promise<AxiosApiResponse>} Assignment details response
        */
-      getById: (assignmentId) => instance.get(`/assignments/${assignmentId}`),
+      getById: (assignmentId) =>
+        routeApiCall(
+          () => instance.get(`/assignments/${assignmentId}`),
+          () => demoDataService.assignments.getById(assignmentId)
+        ),
 
       /**
        * Create new assignment
        * @param {object} assignmentData - Assignment data
        * @returns {Promise<AxiosApiResponse>} Created assignment response
        */
-      create: (assignmentData) => instance.post("/assignments", assignmentData),
+      create: (assignmentData) =>
+        routeApiCall(
+          () => instance.post("/assignments", assignmentData),
+          () => demoDataService.assignments.create(assignmentData)
+        ),
 
       /**
        * Update existing assignment
@@ -609,14 +773,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated assignment response
        */
       update: (assignmentId, assignmentData) =>
-        instance.put(`/assignments/${assignmentId}`, assignmentData),
+        routeApiCall(
+          () => instance.put(`/assignments/${assignmentId}`, assignmentData),
+          () => demoDataService.assignments.update(assignmentId, assignmentData)
+        ),
 
       /**
        * Delete assignment
        * @param {string} assignmentId - Assignment identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (assignmentId) => instance.delete(`/assignments/${assignmentId}`),
+      delete: (assignmentId) =>
+        routeApiCall(
+          () => instance.delete(`/assignments/${assignmentId}`),
+          () => demoDataService.assignments.delete(assignmentId)
+        ),
 
       /**
        * Get submissions for assignment
@@ -624,7 +795,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Assignment submissions response
        */
       getSubmissions: (assignmentId) =>
-        instance.get(`/assignments/${assignmentId}/submissions`),
+        routeApiCall(
+          () => instance.get(`/assignments/${assignmentId}/submissions`),
+          () => demoDataService.assignments.getSubmissions(assignmentId)
+        ),
 
       /**
        * Submit assignment
@@ -633,9 +807,17 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Submission response
        */
       submitAssignment: (assignmentId, submissionData) =>
-        instance.post(
-          `/assignments/${assignmentId}/submissions`,
-          submissionData
+        routeApiCall(
+          () =>
+            instance.post(
+              `/assignments/${assignmentId}/submissions`,
+              submissionData
+            ),
+          () =>
+            demoDataService.assignments.submitAssignment(
+              assignmentId,
+              submissionData
+            )
         ),
 
       /**
@@ -646,9 +828,18 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Grade submission response
        */
       gradeSubmission: (assignmentId, submissionId, gradeData) =>
-        instance.post(
-          `/assignments/${assignmentId}/submissions/${submissionId}/grade`,
-          gradeData
+        routeApiCall(
+          () =>
+            instance.post(
+              `/assignments/${assignmentId}/submissions/${submissionId}/grade`,
+              gradeData
+            ),
+          () =>
+            demoDataService.assignments.gradeSubmission(
+              assignmentId,
+              submissionId,
+              gradeData
+            )
         ),
 
       /**
@@ -657,14 +848,18 @@ const createApiInstance = () => {
        * @param {File} file - File to upload
        * @returns {Promise<AxiosApiResponse>} Upload response
        */
-      uploadAttachment: (assignmentId, file) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        return fileOperations.upload(
-          `/assignments/${assignmentId}/attachments`,
-          formData
-        );
-      },
+      uploadAttachment: (assignmentId, file) =>
+        routeApiCall(
+          () => {
+            const formData = new FormData();
+            formData.append("file", file);
+            return fileOperations.upload(
+              `/assignments/${assignmentId}/attachments`,
+              formData
+            );
+          },
+          () => demoDataService.assignments.uploadAttachment(assignmentId, file)
+        ),
     },
 
     attendance: {
@@ -675,7 +870,11 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Class attendance response
        */
       getByClass: (classId, date) =>
-        instance.get(`/attendance/class/${classId}`, { params: { date } }),
+        routeApiCall(
+          () =>
+            instance.get(`/attendance/class/${classId}`, { params: { date } }),
+          () => demoDataService.attendance.getByClass(classId, date)
+        ),
 
       /**
        * Get student attendance for date range
@@ -685,9 +884,18 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Student attendance response
        */
       getByStudent: (studentId, startDate, endDate) =>
-        instance.get(`/attendance/student/${studentId}`, {
-          params: { startDate, endDate },
-        }),
+        routeApiCall(
+          () =>
+            instance.get(`/attendance/student/${studentId}`, {
+              params: { startDate, endDate },
+            }),
+          () =>
+            demoDataService.attendance.getByStudent(
+              studentId,
+              startDate,
+              endDate
+            )
+        ),
 
       /**
        * Mark attendance for class
@@ -697,10 +905,19 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Mark attendance response
        */
       markAttendance: (classId, date, attendanceData) =>
-        instance.post(`/attendance/class/${classId}`, {
-          date,
-          ...attendanceData,
-        }),
+        routeApiCall(
+          () =>
+            instance.post(`/attendance/class/${classId}`, {
+              date,
+              ...attendanceData,
+            }),
+          () =>
+            demoDataService.attendance.markAttendance(
+              classId,
+              date,
+              attendanceData
+            )
+        ),
 
       /**
        * Update attendance record
@@ -709,7 +926,14 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated attendance response
        */
       updateAttendance: (attendanceId, updateData) =>
-        instance.patch(`/attendance/${attendanceId}`, updateData),
+        routeApiCall(
+          () => instance.patch(`/attendance/${attendanceId}`, updateData),
+          () =>
+            demoDataService.attendance.updateAttendance(
+              attendanceId,
+              updateData
+            )
+        ),
 
       /**
        * Get attendance report for class
@@ -719,9 +943,14 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Attendance report response
        */
       getReport: (classId, startDate, endDate) =>
-        instance.get(`/attendance/class/${classId}/report`, {
-          params: { startDate, endDate },
-        }),
+        routeApiCall(
+          () =>
+            instance.get(`/attendance/class/${classId}/report`, {
+              params: { startDate, endDate },
+            }),
+          () =>
+            demoDataService.attendance.getReport(classId, startDate, endDate)
+        ),
     },
 
     grades: {
@@ -730,14 +959,22 @@ const createApiInstance = () => {
        * @param {string} classId - Class identifier
        * @returns {Promise<AxiosApiResponse>} Class grades response
        */
-      getByClass: (classId) => instance.get(`/grades/class/${classId}`),
+      getByClass: (classId) =>
+        routeApiCall(
+          () => instance.get(`/grades/class/${classId}`),
+          () => demoDataService.grades.getByClass(classId)
+        ),
 
       /**
        * Get grades by student
        * @param {string} studentId - Student identifier
        * @returns {Promise<AxiosApiResponse>} Student grades response
        */
-      getByStudent: (studentId) => instance.get(`/grades/student/${studentId}`),
+      getByStudent: (studentId) =>
+        routeApiCall(
+          () => instance.get(`/grades/student/${studentId}`),
+          () => demoDataService.grades.getByStudent(studentId)
+        ),
 
       /**
        * Enter grades for class subject
@@ -747,9 +984,14 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Enter grades response
        */
       enterGrades: (classId, subjectId, gradesData) =>
-        instance.post(
-          `/grades/class/${classId}/subject/${subjectId}`,
-          gradesData
+        routeApiCall(
+          () =>
+            instance.post(
+              `/grades/class/${classId}/subject/${subjectId}`,
+              gradesData
+            ),
+          () =>
+            demoDataService.grades.enterGrades(classId, subjectId, gradesData)
         ),
 
       /**
@@ -759,7 +1001,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated grade response
        */
       updateGrade: (gradeId, updateData) =>
-        instance.patch(`/grades/${gradeId}`, updateData),
+        routeApiCall(
+          () => instance.patch(`/grades/${gradeId}`, updateData),
+          () => demoDataService.grades.updateGrade(gradeId, updateData)
+        ),
 
       /**
        * Generate student report card
@@ -768,9 +1013,13 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Report card response
        */
       generateReport: (studentId, term) =>
-        instance.get(`/grades/student/${studentId}/report`, {
-          params: { term },
-        }),
+        routeApiCall(
+          () =>
+            instance.get(`/grades/student/${studentId}/report`, {
+              params: { term },
+            }),
+          () => demoDataService.grades.generateReport(studentId, term)
+        ),
 
       /**
        * Download student report card
@@ -779,9 +1028,13 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Report download response
        */
       downloadReport: (studentId, term) =>
-        fileOperations.download(
-          `/grades/student/${studentId}/report/download`,
-          `report-${term}.pdf`
+        routeApiCall(
+          () =>
+            fileOperations.download(
+              `/grades/student/${studentId}/report/download`,
+              `report-${term}.pdf`
+            ),
+          () => demoDataService.grades.downloadReport(studentId, term)
         ),
     },
 
@@ -791,35 +1044,55 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Messages list response
        */
-      getAll: (params) => instance.get("/messages", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/messages", { params }),
+          () => demoDataService.messages.getAll(params)
+        ),
 
       /**
        * Get message by ID
        * @param {string} messageId - Message identifier
        * @returns {Promise<AxiosApiResponse>} Message details response
        */
-      getById: (messageId) => instance.get(`/messages/${messageId}`),
+      getById: (messageId) =>
+        routeApiCall(
+          () => instance.get(`/messages/${messageId}`),
+          () => demoDataService.messages.getById(messageId)
+        ),
 
       /**
        * Send new message
        * @param {object} messageData - Message data
        * @returns {Promise<AxiosApiResponse>} Sent message response
        */
-      send: (messageData) => instance.post("/messages", messageData),
+      send: (messageData) =>
+        routeApiCall(
+          () => instance.post("/messages", messageData),
+          () => demoDataService.messages.send(messageData)
+        ),
 
       /**
        * Mark message as read
        * @param {string} messageId - Message identifier
        * @returns {Promise<AxiosApiResponse>} Mark read response
        */
-      markAsRead: (messageId) => instance.patch(`/messages/${messageId}/read`),
+      markAsRead: (messageId) =>
+        routeApiCall(
+          () => instance.patch(`/messages/${messageId}/read`),
+          () => demoDataService.messages.markAsRead(messageId)
+        ),
 
       /**
        * Delete message
        * @param {string} messageId - Message identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (messageId) => instance.delete(`/messages/${messageId}`),
+      delete: (messageId) =>
+        routeApiCall(
+          () => instance.delete(`/messages/${messageId}`),
+          () => demoDataService.messages.delete(messageId)
+        ),
     },
 
     events: {
@@ -828,21 +1101,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Events list response
        */
-      getAll: (params) => instance.get("/events", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/events", { params }),
+          () => demoDataService.events.getAll(params)
+        ),
 
       /**
        * Get event by ID
        * @param {string} eventId - Event identifier
        * @returns {Promise<AxiosApiResponse>} Event details response
        */
-      getById: (eventId) => instance.get(`/events/${eventId}`),
+      getById: (eventId) =>
+        routeApiCall(
+          () => instance.get(`/events/${eventId}`),
+          () => demoDataService.events.getById(eventId)
+        ),
 
       /**
        * Create new event
        * @param {object} eventData - Event data
        * @returns {Promise<AxiosApiResponse>} Created event response
        */
-      create: (eventData) => instance.post("/events", eventData),
+      create: (eventData) =>
+        routeApiCall(
+          () => instance.post("/events", eventData),
+          () => demoDataService.events.create(eventData)
+        ),
 
       /**
        * Update existing event
@@ -851,14 +1136,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated event response
        */
       update: (eventId, eventData) =>
-        instance.put(`/events/${eventId}`, eventData),
+        routeApiCall(
+          () => instance.put(`/events/${eventId}`, eventData),
+          () => demoDataService.events.update(eventId, eventData)
+        ),
 
       /**
        * Delete event
        * @param {string} eventId - Event identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (eventId) => instance.delete(`/events/${eventId}`),
+      delete: (eventId) =>
+        routeApiCall(
+          () => instance.delete(`/events/${eventId}`),
+          () => demoDataService.events.delete(eventId)
+        ),
 
       /**
        * Get events by date range
@@ -867,7 +1159,11 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Events in range response
        */
       getByDate: (startDate, endDate) =>
-        instance.get("/events/range", { params: { startDate, endDate } }),
+        routeApiCall(
+          () =>
+            instance.get("/events/range", { params: { startDate, endDate } }),
+          () => demoDataService.events.getByDate(startDate, endDate)
+        ),
     },
 
     fees: {
@@ -876,21 +1172,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Fees list response
        */
-      getAll: (params) => instance.get("/fees", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/fees", { params }),
+          () => demoDataService.fees.getAll(params)
+        ),
 
       /**
        * Get fee by ID
        * @param {string} feeId - Fee identifier
        * @returns {Promise<AxiosApiResponse>} Fee details response
        */
-      getById: (feeId) => instance.get(`/fees/${feeId}`),
+      getById: (feeId) =>
+        routeApiCall(
+          () => instance.get(`/fees/${feeId}`),
+          () => demoDataService.fees.getById(feeId)
+        ),
 
       /**
        * Create new fee
        * @param {object} feeData - Fee data
        * @returns {Promise<AxiosApiResponse>} Created fee response
        */
-      create: (feeData) => instance.post("/fees", feeData),
+      create: (feeData) =>
+        routeApiCall(
+          () => instance.post("/fees", feeData),
+          () => demoDataService.fees.create(feeData)
+        ),
 
       /**
        * Update existing fee
@@ -898,21 +1206,33 @@ const createApiInstance = () => {
        * @param {object} feeData - Updated fee data
        * @returns {Promise<AxiosApiResponse>} Updated fee response
        */
-      update: (feeId, feeData) => instance.put(`/fees/${feeId}`, feeData),
+      update: (feeId, feeData) =>
+        routeApiCall(
+          () => instance.put(`/fees/${feeId}`, feeData),
+          () => demoDataService.fees.update(feeId, feeData)
+        ),
 
       /**
        * Delete fee
        * @param {string} feeId - Fee identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (feeId) => instance.delete(`/fees/${feeId}`),
+      delete: (feeId) =>
+        routeApiCall(
+          () => instance.delete(`/fees/${feeId}`),
+          () => demoDataService.fees.delete(feeId)
+        ),
 
       /**
        * Get student fees
        * @param {string} studentId - Student identifier
        * @returns {Promise<AxiosApiResponse>} Student fees response
        */
-      getStudentFees: (studentId) => instance.get(`/fees/student/${studentId}`),
+      getStudentFees: (studentId) =>
+        routeApiCall(
+          () => instance.get(`/fees/student/${studentId}`),
+          () => demoDataService.fees.getStudentFees(studentId)
+        ),
 
       /**
        * Record fee payment
@@ -921,14 +1241,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Payment record response
        */
       recordPayment: (feeId, paymentData) =>
-        instance.post(`/fees/${feeId}/payments`, paymentData),
+        routeApiCall(
+          () => instance.post(`/fees/${feeId}/payments`, paymentData),
+          () => demoDataService.fees.recordPayment(feeId, paymentData)
+        ),
 
       /**
        * Generate fee invoice
        * @param {string} feeId - Fee identifier
        * @returns {Promise<AxiosApiResponse>} Invoice response
        */
-      generateInvoice: (feeId) => instance.get(`/fees/${feeId}/invoice`),
+      generateInvoice: (feeId) =>
+        routeApiCall(
+          () => instance.get(`/fees/${feeId}/invoice`),
+          () => demoDataService.fees.generateInvoice(feeId)
+        ),
 
       /**
        * Download fee invoice
@@ -936,9 +1263,13 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Invoice download response
        */
       downloadInvoice: (feeId) =>
-        fileOperations.download(
-          `/fees/${feeId}/invoice/download`,
-          `invoice-${feeId}.pdf`
+        routeApiCall(
+          () =>
+            fileOperations.download(
+              `/fees/${feeId}/invoice/download`,
+              `invoice-${feeId}.pdf`
+            ),
+          () => demoDataService.fees.downloadInvoice(feeId)
         ),
     },
 
@@ -949,14 +1280,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Attendance stats response
        */
       getAttendanceStats: (params) =>
-        instance.get("/analytics/attendance", { params }),
+        routeApiCall(
+          () => instance.get("/analytics/attendance", { params }),
+          () => demoDataService.analytics.getAttendanceStats(params)
+        ),
 
       /**
        * Get grade statistics
        * @param {QueryParams} [params] - Query parameters for filtering
        * @returns {Promise<AxiosApiResponse>} Grade stats response
        */
-      getGradeStats: (params) => instance.get("/analytics/grades", { params }),
+      getGradeStats: (params) =>
+        routeApiCall(
+          () => instance.get("/analytics/grades", { params }),
+          () => demoDataService.analytics.getGradeStats(params)
+        ),
 
       /**
        * Get financial statistics
@@ -964,7 +1302,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Financial stats response
        */
       getFinancialStats: (params) =>
-        instance.get("/analytics/finance", { params }),
+        routeApiCall(
+          () => instance.get("/analytics/finance", { params }),
+          () => demoDataService.analytics.getFinancialStats(params)
+        ),
 
       /**
        * Generate analytics report
@@ -973,7 +1314,10 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Generated report response
        */
       generateReport: (reportType, params) =>
-        instance.get(`/analytics/reports/${reportType}`, { params }),
+        routeApiCall(
+          () => instance.get(`/analytics/reports/${reportType}`, { params }),
+          () => demoDataService.analytics.generateReport(reportType, params)
+        ),
 
       /**
        * Download analytics report
@@ -982,10 +1326,14 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Report download response
        */
       downloadReport: (reportType, params) =>
-        fileOperations.download(
-          `/analytics/reports/${reportType}/download`,
-          `${reportType}-report.pdf`,
-          { params }
+        routeApiCall(
+          () =>
+            fileOperations.download(
+              `/analytics/reports/${reportType}/download`,
+              `${reportType}-report.pdf`,
+              { params }
+            ),
+          () => demoDataService.analytics.downloadReport(reportType, params)
         ),
     },
 
@@ -995,21 +1343,33 @@ const createApiInstance = () => {
        * @param {QueryParams} [params] - Query parameters for filtering and pagination
        * @returns {Promise<AxiosApiResponse>} Schedules list response
        */
-      getAll: (params) => instance.get("/schedules", { params }),
+      getAll: (params) =>
+        routeApiCall(
+          () => instance.get("/schedules", { params }),
+          () => demoDataService.schedule.getAll(params)
+        ),
 
       /**
        * Get schedule by ID
        * @param {string} scheduleId - Schedule identifier
        * @returns {Promise<AxiosApiResponse>} Schedule details response
        */
-      getById: (scheduleId) => instance.get(`/schedules/${scheduleId}`),
+      getById: (scheduleId) =>
+        routeApiCall(
+          () => instance.get(`/schedules/${scheduleId}`),
+          () => demoDataService.schedule.getById(scheduleId)
+        ),
 
       /**
        * Create new schedule
        * @param {object} scheduleData - Schedule data
        * @returns {Promise<AxiosApiResponse>} Created schedule response
        */
-      create: (scheduleData) => instance.post("/schedules", scheduleData),
+      create: (scheduleData) =>
+        routeApiCall(
+          () => instance.post("/schedules", scheduleData),
+          () => demoDataService.schedule.create(scheduleData)
+        ),
 
       /**
        * Update existing schedule
@@ -1018,14 +1378,21 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Updated schedule response
        */
       update: (scheduleId, scheduleData) =>
-        instance.put(`/schedules/${scheduleId}`, scheduleData),
+        routeApiCall(
+          () => instance.put(`/schedules/${scheduleId}`, scheduleData),
+          () => demoDataService.schedule.update(scheduleId, scheduleData)
+        ),
 
       /**
        * Delete schedule
        * @param {string} scheduleId - Schedule identifier
        * @returns {Promise<AxiosApiResponse>} Deletion response
        */
-      delete: (scheduleId) => instance.delete(`/schedules/${scheduleId}`),
+      delete: (scheduleId) =>
+        routeApiCall(
+          () => instance.delete(`/schedules/${scheduleId}`),
+          () => demoDataService.schedule.delete(scheduleId)
+        ),
 
       /**
        * Get teacher schedule
@@ -1033,21 +1400,133 @@ const createApiInstance = () => {
        * @returns {Promise<AxiosApiResponse>} Teacher schedule response
        */
       getByTeacher: (teacherId) =>
-        instance.get(`/schedules/teacher/${teacherId}`),
+        routeApiCall(
+          () => instance.get(`/schedules/teacher/${teacherId}`),
+          () => demoDataService.schedule.getByTeacher(teacherId)
+        ),
 
       /**
        * Get class schedule
        * @param {string} classId - Class identifier
        * @returns {Promise<AxiosApiResponse>} Class schedule response
        */
-      getByClass: (classId) => instance.get(`/schedules/class/${classId}`),
+      getByClass: (classId) =>
+        routeApiCall(
+          () => instance.get(`/schedules/class/${classId}`),
+          () => demoDataService.schedule.getByClass(classId)
+        ),
 
       /**
        * Get room schedule
        * @param {string} roomId - Room identifier
        * @returns {Promise<AxiosApiResponse>} Room schedule response
        */
-      getByRoom: (roomId) => instance.get(`/schedules/room/${roomId}`),
+      getByRoom: (roomId) =>
+        routeApiCall(
+          () => instance.get(`/schedules/room/${roomId}`),
+          () => demoDataService.schedule.getByRoom(roomId)
+        ),
+    },
+
+    // Dashboard helper methods
+    dashboard: {
+      /**
+       * Get admin dashboard data
+       * @returns {Promise<AxiosApiResponse>} Admin dashboard response
+       */
+      getAdminDashboardData: () =>
+        routeApiCall(
+          () =>
+            Promise.all([
+              instance.get("/analytics/attendance"),
+              instance.get("/analytics/grades"),
+              instance.get("/analytics/finance"),
+            ]).then(([attendance, grades, financial]) => ({
+              data: {
+                attendance: attendance.data,
+                grades: grades.data,
+                financial: financial.data,
+              },
+            })),
+          () => demoDataService.dashboard.getAdminDashboardData()
+        ),
+
+      /**
+       * Get teacher dashboard data
+       * @param {string} teacherId - Teacher identifier
+       * @returns {Promise<AxiosApiResponse>} Teacher dashboard response
+       */
+      getTeacherDashboardData: (teacherId) =>
+        routeApiCall(
+          () =>
+            Promise.all([
+              instance.get("/classes", { params: { teacherId } }),
+              instance.get("/assignments", { params: { teacherId } }),
+            ]).then(([classes, assignments]) => ({
+              data: {
+                classes: classes.data,
+                assignments: assignments.data,
+              },
+            })),
+          () => demoDataService.dashboard.getTeacherDashboardData(teacherId)
+        ),
+
+      /**
+       * Get student dashboard data
+       * @param {string} studentId - Student identifier
+       * @returns {Promise<AxiosApiResponse>} Student dashboard response
+       */
+      getStudentDashboardData: (studentId) =>
+        routeApiCall(
+          () =>
+            Promise.all([
+              instance.get("/assignments", { params: { studentId } }),
+              instance.get(`/grades/student/${studentId}`),
+            ]).then(([assignments, grades]) => ({
+              data: {
+                assignments: assignments.data,
+                grades: grades.data,
+              },
+            })),
+          () => demoDataService.dashboard.getStudentDashboardData(studentId)
+        ),
+
+      /**
+       * Get parent dashboard data
+       * @param {string} parentId - Parent identifier
+       * @returns {Promise<AxiosApiResponse>} Parent dashboard response
+       */
+      getParentDashboardData: (parentId) =>
+        routeApiCall(
+          () =>
+            instance
+              .get(`/users/role/student`, { params: { parentId } })
+              .then((students) =>
+                Promise.all(
+                  students.data.map((student) =>
+                    Promise.all([
+                      instance.get(`/grades/student/${student.id}`),
+                      instance.get(`/attendance/student/${student.id}`, {
+                        params: {
+                          startDate: new Date(
+                            Date.now() - 30 * 24 * 60 * 60 * 1000
+                          )
+                            .toISOString()
+                            .split("T")[0],
+                          endDate: new Date().toISOString().split("T")[0],
+                        },
+                      }),
+                    ]).then(([grades, attendance]) => ({
+                      student,
+                      grades: grades.data,
+                      attendance: attendance.data,
+                    }))
+                  )
+                )
+              )
+              .then((childrenData) => ({ data: { children: childrenData } })),
+          () => demoDataService.dashboard.getParentDashboardData(parentId)
+        ),
     },
   };
 };

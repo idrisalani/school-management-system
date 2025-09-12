@@ -12,6 +12,7 @@ import {
   Bell,
   BarChart3, // Changed from ChartBar
 } from "lucide-react";
+import { DemoLandingSection } from "../../components/demo/DemoLandingSection";
 
 const LandingPage = () => {
   const features = [
@@ -102,12 +103,10 @@ const LandingPage = () => {
               </Link>
             </div>
             <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-              <Link
-                to="/demo"
-                className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10"
-              >
-                Live Demo
-              </Link>
+              {/* Replace the old demo link with DemoLandingSection */}
+              <div className="w-full flex items-center justify-center">
+                <DemoLandingSection />
+              </div>
             </div>
           </div>
         </div>
@@ -142,12 +141,18 @@ const LandingPage = () => {
               Join thousands of schools already using EduManager to improve
               their operations.
             </p>
-            <Link
-              to="/register"
-              className="mt-8 w-full inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 sm:w-auto"
-            >
-              Get Started Today
-            </Link>
+            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link
+                to="/register"
+                className="w-full inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 sm:w-auto"
+              >
+                Get Started Today
+              </Link>
+              {/* Add another demo option in CTA section */}
+              <div className="demo-cta-section">
+                <DemoLandingSection />
+              </div>
+            </div>
           </div>
         </div>
       </div>

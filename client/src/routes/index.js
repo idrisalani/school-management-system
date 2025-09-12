@@ -3,6 +3,7 @@ import React, { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
 import PropTypes from "prop-types";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import { useDemo } from "../contexts/DemoContext.jsx"; // ADD THIS
 import LoadingSpinner from "../components/common/LoadingSpinner.jsx";
 
 // Auth components - Keep immediate loading for faster login
@@ -56,6 +57,10 @@ const Privacy = lazy(() => import("../features/public/Privacy.jsx"));
 const Terms = lazy(() => import("../features/public/Terms.jsx"));
 const Contact = lazy(() => import("../features/public/Contact.jsx"));
 
+// ADD: Demo components - Lazy loaded
+const RoleSelector = lazy(() => import("../components/demo/RoleSelector.jsx"));
+const DemoWrapper = lazy(() => import("../components/demo/DemoWrapper.jsx"));
+
 // Enhanced Loading Component
 const SuspenseWrapper = ({ children, fallback = null }) => (
   <Suspense
@@ -108,72 +113,109 @@ const SimpleLayout = () => {
   );
 };
 
-// Enhanced Teacher Routes Handler - NEW: Add profile routing
+// ADD: Demo-aware route handlers that work with existing structure
+const DemoAwareRouteHandler = ({ children, fallbackRole }) => {
+  const { isDemoMode, demoUser } = useDemo();
+  const { user } = useAuth();
+
+  // Use demo user when in demo mode, otherwise use real user
+  const effectiveUser = isDemoMode ? demoUser : user;
+
+  if (!effectiveUser && !isDemoMode) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!effectiveUser && isDemoMode) {
+    return <Navigate to="/demo" replace />;
+  }
+
+  return children;
+};
+
+// Enhanced Teacher Routes Handler - MODIFIED: Add demo awareness
 const TeacherRoutesHandler = () => {
   return (
-    <SuspenseWrapper>
-      <Routes>
-        <Route index element={<TeacherDashboard />} />
-        <Route path="dashboard" element={<TeacherDashboard />} />
-        <Route path="profile" element={<TeacherProfile />} />
-        <Route
-          path="*"
-          element={<Navigate to="/teacher/dashboard" replace />}
-        />
-      </Routes>
-    </SuspenseWrapper>
+    <DemoAwareRouteHandler fallbackRole="teacher">
+      <SuspenseWrapper>
+        <Routes>
+          <Route index element={<TeacherDashboard />} />
+          <Route path="dashboard" element={<TeacherDashboard />} />
+          <Route path="profile" element={<TeacherProfile />} />
+          <Route
+            path="*"
+            element={<Navigate to="/teacher/dashboard" replace />}
+          />
+        </Routes>
+      </SuspenseWrapper>
+    </DemoAwareRouteHandler>
   );
 };
 
-// Enhanced Student Routes Handler - NEW: Add profile routing
+// Enhanced Student Routes Handler - MODIFIED: Add demo awareness
 const StudentRoutesHandler = () => {
   return (
-    <SuspenseWrapper>
-      <Routes>
-        <Route index element={<StudentDashboard />} />
-        <Route path="dashboard" element={<StudentDashboard />} />
-        <Route path="profile" element={<StudentProfile />} />
-        <Route
-          path="*"
-          element={<Navigate to="/student/dashboard" replace />}
-        />
-      </Routes>
-    </SuspenseWrapper>
+    <DemoAwareRouteHandler fallbackRole="student">
+      <SuspenseWrapper>
+        <Routes>
+          <Route index element={<StudentDashboard />} />
+          <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="profile" element={<StudentProfile />} />
+          <Route
+            path="*"
+            element={<Navigate to="/student/dashboard" replace />}
+          />
+        </Routes>
+      </SuspenseWrapper>
+    </DemoAwareRouteHandler>
   );
 };
 
-// Enhanced Parent Routes Handler - Keep your working implementation but add lazy loading
+// Enhanced Parent Routes Handler - MODIFIED: Add demo awareness
 const ParentRoutesHandler = () => {
   return (
-    <SuspenseWrapper>
-      <Routes>
-        <Route index element={<ParentDashboard />} />
-        <Route path="dashboard" element={<ParentDashboard />} />
-        <Route path="profile" element={<ParentProfile />} />
-        <Route path="children" element={<ChildrenOverview />} />
-        <Route path="*" element={<Navigate to="/parent/dashboard" replace />} />
-      </Routes>
-    </SuspenseWrapper>
+    <DemoAwareRouteHandler fallbackRole="parent">
+      <SuspenseWrapper>
+        <Routes>
+          <Route index element={<ParentDashboard />} />
+          <Route path="dashboard" element={<ParentDashboard />} />
+          <Route path="profile" element={<ParentProfile />} />
+          <Route path="children" element={<ChildrenOverview />} />
+          <Route
+            path="*"
+            element={<Navigate to="/parent/dashboard" replace />}
+          />
+        </Routes>
+      </SuspenseWrapper>
+    </DemoAwareRouteHandler>
   );
 };
 
-// Enhanced Admin Routes Handler - NEW: Add for consistency
+// Enhanced Admin Routes Handler - MODIFIED: Add demo awareness
 const AdminRoutesHandler = () => {
   return (
-    <SuspenseWrapper>
-      <Routes>
-        <Route index element={<AdminDashboard />} />
-        <Route path="dashboard" element={<AdminDashboard />} />
-        {/* TODO: Add AdminProfile route when component is created */}
-        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-      </Routes>
-    </SuspenseWrapper>
+    <DemoAwareRouteHandler fallbackRole="admin">
+      <SuspenseWrapper>
+        <Routes>
+          <Route index element={<AdminDashboard />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          {/* TODO: Add AdminProfile route when component is created */}
+          <Route
+            path="*"
+            element={<Navigate to="/admin/dashboard" replace />}
+          />
+        </Routes>
+      </SuspenseWrapper>
+    </DemoAwareRouteHandler>
   );
 };
 
 const AppRoutes = () => {
   const { user, isAuthenticated } = useAuth();
-  const userRole = user?.role || "";
+  const { isDemoMode, demoUser } = useDemo(); // ADD THIS
+
+  // Use demo user when in demo mode for routing decisions
+  const effectiveUser = isDemoMode ? demoUser : user;
+  const userRole = effectiveUser?.role || "";
 
   const getDashboardRoute = () => {
     return `/${userRole}/dashboard`;
@@ -181,11 +223,11 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* Public Routes - Keep your existing structure */}
+      {/* Public Routes - MODIFIED: Handle demo mode redirect */}
       <Route
         path="/"
         element={
-          isAuthenticated ? (
+          isAuthenticated || isDemoMode ? (
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <SuspenseWrapper>
@@ -195,11 +237,11 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Authentication Routes - Keep immediate loading for performance */}
+      {/* Authentication Routes - MODIFIED: Handle demo mode */}
       <Route
         path="/login"
         element={
-          isAuthenticated ? (
+          isAuthenticated || isDemoMode ? (
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <Login />
@@ -209,11 +251,43 @@ const AppRoutes = () => {
       <Route
         path="/register"
         element={
-          isAuthenticated ? (
+          isAuthenticated || isDemoMode ? (
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <Register />
           )
+        }
+      />
+
+      {/* ADD: Demo Routes - New demo functionality */}
+      <Route
+        path="/demo"
+        element={
+          <SuspenseWrapper>
+            <div className="min-h-screen bg-gray-50 py-12">
+              <div className="max-w-6xl mx-auto px-4">
+                <div className="text-center mb-8">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-4">
+                    Experience EduManager
+                  </h1>
+                  <p className="text-lg text-gray-600">
+                    Choose a role to explore our School Management System with
+                    realistic demo data
+                  </p>
+                </div>
+                <RoleSelector />
+              </div>
+            </div>
+          </SuspenseWrapper>
+        }
+      />
+
+      <Route
+        path="/demo/:role"
+        element={
+          <SuspenseWrapper>
+            <DemoWrapper />
+          </SuspenseWrapper>
         }
       />
 
@@ -225,7 +299,7 @@ const AppRoutes = () => {
       <Route
         path="/forgot-password"
         element={
-          isAuthenticated ? (
+          isAuthenticated || isDemoMode ? (
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <ForgotPassword />
@@ -235,7 +309,7 @@ const AppRoutes = () => {
       <Route
         path="/reset-password/:token"
         element={
-          isAuthenticated ? (
+          isAuthenticated || isDemoMode ? (
             <Navigate to={getDashboardRoute()} replace />
           ) : (
             <ResetPassword />
@@ -245,7 +319,7 @@ const AppRoutes = () => {
 
       {/* Other Public Routes - Add lazy loading */}
       <Route
-        path="/demo"
+        path="/demo-old"
         element={
           <SuspenseWrapper>
             <Demo />
@@ -280,63 +354,79 @@ const AppRoutes = () => {
       {/* Public Catch-all Route - Keep your existing */}
       <Route path="/unauthorized" element={<Navigate to="/" replace />} />
 
-      {/* Protected Routes - Enhanced with better role checking */}
+      {/* Protected Routes - MODIFIED: Enhanced with demo awareness */}
       <Route
         element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
+          <ProtectedRoute isAuthenticated={isAuthenticated || isDemoMode}>
             <SimpleLayout />
           </ProtectedRoute>
         }
       >
-        {/* Admin routes - Enhanced with sub-routing */}
+        {/* Admin routes - MODIFIED: Enhanced with demo support */}
         <Route
           path="/admin/*"
           element={
-            <ProtectedRoute
-              isAuthenticated={isAuthenticated}
-              allowedRoles={["admin"]}
-            >
+            isDemoMode ? (
               <AdminRoutesHandler />
-            </ProtectedRoute>
+            ) : (
+              <ProtectedRoute
+                isAuthenticated={isAuthenticated}
+                allowedRoles={["admin"]}
+              >
+                <AdminRoutesHandler />
+              </ProtectedRoute>
+            )
           }
         />
 
-        {/* Teacher routes - Enhanced with profile routing */}
+        {/* Teacher routes - MODIFIED: Enhanced with demo support */}
         <Route
           path="/teacher/*"
           element={
-            <ProtectedRoute
-              isAuthenticated={isAuthenticated}
-              allowedRoles={["teacher"]}
-            >
+            isDemoMode ? (
               <TeacherRoutesHandler />
-            </ProtectedRoute>
+            ) : (
+              <ProtectedRoute
+                isAuthenticated={isAuthenticated}
+                allowedRoles={["teacher"]}
+              >
+                <TeacherRoutesHandler />
+              </ProtectedRoute>
+            )
           }
         />
 
-        {/* Student routes - Enhanced with profile routing */}
+        {/* Student routes - MODIFIED: Enhanced with demo support */}
         <Route
           path="/student/*"
           element={
-            <ProtectedRoute
-              isAuthenticated={isAuthenticated}
-              allowedRoles={["student"]}
-            >
+            isDemoMode ? (
               <StudentRoutesHandler />
-            </ProtectedRoute>
+            ) : (
+              <ProtectedRoute
+                isAuthenticated={isAuthenticated}
+                allowedRoles={["student"]}
+              >
+                <StudentRoutesHandler />
+              </ProtectedRoute>
+            )
           }
         />
 
-        {/* Parent routes - Keep your working implementation with enhancements */}
+        {/* Parent routes - MODIFIED: Enhanced with demo support */}
         <Route
           path="/parent/*"
           element={
-            <ProtectedRoute
-              isAuthenticated={isAuthenticated}
-              allowedRoles={["parent"]}
-            >
+            isDemoMode ? (
               <ParentRoutesHandler />
-            </ProtectedRoute>
+            ) : (
+              <ProtectedRoute
+                isAuthenticated={isAuthenticated}
+                allowedRoles={["parent"]}
+              >
+                <ParentRoutesHandler />
+              </ProtectedRoute>
+            )
           }
         />
 
@@ -378,9 +468,14 @@ SuspenseWrapper.propTypes = {
   fallback: PropTypes.node,
 };
 
+DemoAwareRouteHandler.propTypes = {
+  children: PropTypes.node.isRequired,
+  fallbackRole: PropTypes.string,
+};
+
 export default AppRoutes;
 
-// Navigation utilities - Fixed TypeScript issues
+// Navigation utilities - MODIFIED: Enhanced with demo support
 export const NavigationUtils = {
   getDashboardRoute: (userRole) => {
     switch (userRole) {
@@ -410,6 +505,10 @@ export const NavigationUtils = {
     }
   },
 
+  getDemoRoute: (userRole) => {
+    return `/demo/${userRole}`;
+  },
+
   canAccessRoute: (userRole, routePath) => {
     switch (userRole) {
       case "admin":
@@ -426,12 +525,15 @@ export const NavigationUtils = {
   },
 };
 
-// Enhanced navigation hook - Fixed TypeScript issues
+// Enhanced navigation hook - MODIFIED: Add demo support
 export const useNavigation = () => {
   const { user } = useAuth();
+  const { isDemoMode, demoUser } = useDemo();
+
+  const effectiveUser = isDemoMode ? demoUser : user;
 
   const getRouteFor = (page) => {
-    const userRole = user?.role;
+    const userRole = effectiveUser?.role;
 
     if (!userRole) return "/";
 
@@ -450,8 +552,17 @@ export const useNavigation = () => {
       return "/parent/children";
     }
 
+    // Handle demo routes
+    if (page === "demo") {
+      return NavigationUtils.getDemoRoute(userRole);
+    }
+
     return "/";
   };
 
-  return { getRouteFor };
+  return {
+    getRouteFor,
+    isDemoMode,
+    effectiveUser,
+  };
 };
