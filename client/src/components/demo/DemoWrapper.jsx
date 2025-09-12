@@ -168,7 +168,7 @@ const DemoWrapper = () => {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowRoleModal(true)}
-                className="text-blue-100 hover:text-white text-sm underline underline-offset-2 transition-colors"
+                className="bg-white text-blue-600 px-4 py-1.5 rounded-full text-sm font-medium hover:bg-blue-50 transition-colors"
               >
                 Switch Role
               </button>
