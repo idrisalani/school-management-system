@@ -6,351 +6,244 @@ import { useParams, Navigate } from "react-router-dom";
 import { useDemo } from "../../contexts/DemoContext";
 import { useAuth } from "../../contexts/AuthContext";
 
-// Demo Mode Indicator Component
-const DemoModeIndicator = () => {
-  const { isDemoMode, exitDemoMode, resetDemoData, getDemoMessage } = useDemo();
-
-  if (!isDemoMode) return null;
-
-  return (
-    <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <div className="h-5 w-5 text-blue-400">ℹ️</div>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-blue-700">
-              <span className="font-medium">Demo Mode:</span> {getDemoMessage()}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={resetDemoData}
-            className="text-blue-600 hover:text-blue-500 text-sm font-medium"
-          >
-            Reset Demo
-          </button>
-          <button
-            onClick={exitDemoMode}
-            className="text-blue-600 hover:text-blue-500 text-sm font-medium"
-          >
-            Exit Demo
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Simple Dashboard Components (you can replace these with your actual dashboards)
-const AdminDashboard = () => (
-  <div className="p-6">
-    <h2 className="text-3xl font-bold text-gray-900 mb-6">Admin Dashboard</h2>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Total Students</h3>
-        <p className="text-3xl font-bold text-blue-600">2,847</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Total Teachers</h3>
-        <p className="text-3xl font-bold text-green-600">156</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Attendance Rate</h3>
-        <p className="text-3xl font-bold text-purple-600">92.8%</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Monthly Revenue</h3>
-        <p className="text-3xl font-bold text-orange-600">$485,200</p>
-      </div>
-    </div>
-
-    <div className="mt-8 bg-white p-6 rounded-lg shadow">
-      <h3 className="text-xl font-semibold mb-4">Recent Activities</h3>
-      <div className="space-y-3">
-        <div className="flex items-center p-3 bg-gray-50 rounded">
-          <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-          <span>New teacher Sarah Johnson registered</span>
-        </div>
-        <div className="flex items-center p-3 bg-gray-50 rounded">
-          <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-          <span>Grade 10A attendance report generated</span>
-        </div>
-        <div className="flex items-center p-3 bg-gray-50 rounded">
-          <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
-          <span>Monthly financial report completed</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const TeacherDashboard = () => (
-  <div className="p-6">
-    <h2 className="text-3xl font-bold text-gray-900 mb-6">Teacher Dashboard</h2>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">My Students</h3>
-        <p className="text-3xl font-bold text-blue-600">89</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Pending Assignments</h3>
-        <p className="text-3xl font-bold text-orange-600">12</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Average Grade</h3>
-        <p className="text-3xl font-bold text-green-600">B+</p>
-      </div>
-    </div>
-
-    <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">My Classes</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Mathematics 10A</span>
-            <span className="text-sm text-gray-600">28 students</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Algebra II</span>
-            <span className="text-sm text-gray-600">32 students</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Geometry</span>
-            <span className="text-sm text-gray-600">29 students</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Recent Assignments</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Quadratic Equations</span>
-            <span className="text-sm text-blue-600">Due Tomorrow</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Linear Functions Quiz</span>
-            <span className="text-sm text-green-600">Completed</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Geometry Proofs</span>
-            <span className="text-sm text-orange-600">In Progress</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const StudentDashboard = () => (
-  <div className="p-6">
-    <h2 className="text-3xl font-bold text-gray-900 mb-6">Student Dashboard</h2>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Attendance Rate</h3>
-        <p className="text-3xl font-bold text-green-600">96%</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Current GPA</h3>
-        <p className="text-3xl font-bold text-blue-600">3.7</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-2">Assignments Due</h3>
-        <p className="text-3xl font-bold text-orange-600">3</p>
-      </div>
-    </div>
-
-    <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">My Courses</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Mathematics</span>
-            <span className="text-sm font-semibold text-green-600">A-</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">English Literature</span>
-            <span className="text-sm font-semibold text-blue-600">B+</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">Science</span>
-            <span className="text-sm font-semibold text-green-600">A</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-            <span className="font-medium">History</span>
-            <span className="text-sm font-semibold text-blue-600">B</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Upcoming Assignments</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center p-3 bg-red-50 rounded">
-            <span className="font-medium">Math Homework #15</span>
-            <span className="text-sm text-red-600">Due Tomorrow</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-yellow-50 rounded">
-            <span className="font-medium">History Essay</span>
-            <span className="text-sm text-yellow-600">Due Friday</span>
-          </div>
-          <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
-            <span className="font-medium">Science Lab Report</span>
-            <span className="text-sm text-blue-600">Due Next Week</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const ParentDashboard = () => (
-  <div className="p-6">
-    <h2 className="text-3xl font-bold text-gray-900 mb-6">Parent Dashboard</h2>
-
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Emma Smith - Grade 9</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span>Overall GPA:</span>
-            <span className="font-semibold text-green-600">3.8</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Attendance Rate:</span>
-            <span className="font-semibold text-blue-600">95%</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Assignments Due:</span>
-            <span className="font-semibold text-orange-600">2</span>
-          </div>
-        </div>
-
-        <h4 className="font-semibold mt-4 mb-2">Recent Grades:</h4>
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Mathematics Quiz</span>
-            <span className="font-medium">A-</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>English Essay</span>
-            <span className="font-medium">B+</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Science Lab</span>
-            <span className="font-medium">A</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Liam Smith - Grade 7</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span>Overall GPA:</span>
-            <span className="font-semibold text-green-600">3.6</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Attendance Rate:</span>
-            <span className="font-semibold text-blue-600">93%</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Assignments Due:</span>
-            <span className="font-semibold text-orange-600">1</span>
-          </div>
-        </div>
-
-        <h4 className="font-semibold mt-4 mb-2">Recent Grades:</h4>
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>History Project</span>
-            <span className="font-medium">A</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Math Test</span>
-            <span className="font-medium">B</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Reading Assignment</span>
-            <span className="font-medium">B+</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className="mt-6 bg-white p-6 rounded-lg shadow">
-      <h3 className="text-xl font-semibold mb-4">Upcoming Events</h3>
-      <div className="space-y-3">
-        <div className="flex items-center p-3 bg-blue-50 rounded">
-          <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-          <span>Parent-Teacher Conference - Emma (Tomorrow 3:00 PM)</span>
-        </div>
-        <div className="flex items-center p-3 bg-green-50 rounded">
-          <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-          <span>Science Fair - Liam (Friday 6:00 PM)</span>
-        </div>
-        <div className="flex items-center p-3 bg-purple-50 rounded">
-          <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
-          <span>School Holiday - MLK Day (Next Monday)</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+console.log("🚀 DemoWrapper component loaded");
 
 export const DemoWrapper = () => {
   const { role } = useParams();
   const { isDemoMode, demoUser, enterDemoMode } = useDemo();
   const { setUser } = useAuth();
 
+  console.log("🎯 DemoWrapper rendering with:", {
+    role,
+    isDemoMode,
+    demoUser: !!demoUser,
+  });
+
   // Set demo user as authenticated user for the session
   useEffect(() => {
+    console.log("🔄 useEffect 1:", { role, isDemoMode });
     if (role && !isDemoMode) {
+      console.log("🚀 Entering demo mode for role:", role);
       enterDemoMode(role);
     }
   }, [role, isDemoMode, enterDemoMode]);
 
   useEffect(() => {
+    console.log("🔄 useEffect 2:", { demoUser: !!demoUser, isDemoMode });
     if (demoUser && isDemoMode) {
-      // Temporarily set demo user as authenticated user
+      console.log("👤 Setting demo user as authenticated user");
       setUser(demoUser);
     }
   }, [demoUser, isDemoMode, setUser]);
 
+  console.log("🎲 Current state:", {
+    role,
+    isDemoMode,
+    hasDemoUser: !!demoUser,
+  });
+
   if (!role || !["admin", "teacher", "student", "parent"].includes(role)) {
+    console.log("❌ Invalid role, redirecting to home");
     return <Navigate to="/" replace />;
   }
 
   if (!isDemoMode || !demoUser) {
+    console.log("⏳ Loading demo environment...", {
+      isDemoMode,
+      hasDemoUser: !!demoUser,
+    });
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-pulse">Loading demo environment...</div>
+        <div className="animate-pulse text-lg">
+          Loading demo environment for {role}...
+        </div>
       </div>
     );
   }
 
-  const getDashboardComponent = () => {
-    switch (role) {
-      case "admin":
-        return <AdminDashboard />;
-      case "teacher":
-        return <TeacherDashboard />;
-      case "student":
-        return <StudentDashboard />;
-      case "parent":
-        return <ParentDashboard />;
-      default:
-        return <div>Invalid role</div>;
-    }
-  };
+  console.log("✅ Rendering dashboard for role:", role);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DemoModeIndicator />
-      {getDashboardComponent()}
+    <div className="min-h-screen bg-gray-50 p-8">
+      {/* Debug Info */}
+      <div className="bg-yellow-100 border border-yellow-400 p-4 rounded mb-6">
+        <h2 className="font-bold text-lg">DEBUG INFO:</h2>
+        <p>Role: {role}</p>
+        <p>Demo Mode: {isDemoMode ? "YES" : "NO"}</p>
+        <p>
+          Demo User:{" "}
+          {demoUser
+            ? `${demoUser.first_name} ${demoUser.last_name} (${demoUser.role})`
+            : "NONE"}
+        </p>
+        <p>URL: {window.location.pathname}</p>
+      </div>
+
+      {/* Demo Mode Indicator */}
+      <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <div className="h-5 w-5 text-blue-400">ℹ️</div>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-blue-700">
+                <span className="font-medium">Demo Mode Active:</span> You are
+                viewing the {role} dashboard with sample data.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Simple Role-Specific Content */}
+      <div className="bg-white p-8 rounded-lg shadow-lg">
+        {role === "admin" && (
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-6">
+              Admin Dashboard
+            </h1>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Total Students</h3>
+                <p className="text-3xl font-bold">2,847</p>
+              </div>
+              <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Total Teachers</h3>
+                <p className="text-3xl font-bold">156</p>
+              </div>
+              <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Attendance Rate</h3>
+                <p className="text-3xl font-bold">92.8%</p>
+              </div>
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Revenue</h3>
+                <p className="text-3xl font-bold">$485K</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {role === "teacher" && (
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-6">
+              Teacher Dashboard
+            </h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">My Students</h3>
+                <p className="text-3xl font-bold">89</p>
+              </div>
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Pending Grades</h3>
+                <p className="text-3xl font-bold">12</p>
+              </div>
+              <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Average Grade</h3>
+                <p className="text-3xl font-bold">B+</p>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-2xl font-bold mb-4">My Classes</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                  <span className="font-medium">Mathematics 10A</span>
+                  <span className="text-sm text-gray-600">28 students</span>
+                </div>
+                <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                  <span className="font-medium">Algebra II</span>
+                  <span className="text-sm text-gray-600">32 students</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {role === "student" && (
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-6">
+              Student Dashboard
+            </h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Current GPA</h3>
+                <p className="text-3xl font-bold">3.7</p>
+              </div>
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Attendance</h3>
+                <p className="text-3xl font-bold">96%</p>
+              </div>
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-lg text-white">
+                <h3 className="text-lg font-semibold mb-2">Assignments Due</h3>
+                <p className="text-3xl font-bold">3</p>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-2xl font-bold mb-4">Recent Grades</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                  <span className="font-medium">Mathematics Quiz</span>
+                  <span className="font-bold text-green-600">A-</span>
+                </div>
+                <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                  <span className="font-medium">English Essay</span>
+                  <span className="font-bold text-blue-600">B+</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {role === "parent" && (
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-6">
+              Parent Dashboard
+            </h1>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-r from-pink-100 to-pink-200 p-6 rounded-lg">
+                <h3 className="text-xl font-bold mb-4">Emma Smith - Grade 9</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>GPA:</span>
+                    <span className="font-bold text-green-600">3.8</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Attendance:</span>
+                    <span className="font-bold text-blue-600">95%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-r from-blue-100 to-blue-200 p-6 rounded-lg">
+                <h3 className="text-xl font-bold mb-4">Liam Smith - Grade 7</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>GPA:</span>
+                    <span className="font-bold text-green-600">3.6</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Attendance:</span>
+                    <span className="font-bold text-blue-600">93%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Exit Demo Button */}
+      <div className="mt-8 text-center">
+        <button
+          onClick={() => (window.location.href = "/")}
+          className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 transition-colors"
+        >
+          Exit Demo
+        </button>
+      </div>
     </div>
   );
 };
