@@ -46,31 +46,38 @@ const DialogTitle = ({ children, className = "" }) => {
 };
 
 export const DemoLandingSection = () => {
+  console.log("🎯 DemoLandingSection rendering...");
   const [isOpen, setIsOpen] = useState(false);
+  console.log("🎯 isOpen state:", isOpen);
 
   const handleRoleSelect = (role) => {
+    console.log("🎯 Role selected:", role);
     setIsOpen(false);
-    // Navigation happens in RoleSelector via enterDemoMode
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger onClick={() => setIsOpen(true)}>
-        <Button variant="outline" size="lg">
-          Live Demo
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Choose Your Demo Experience</DialogTitle>
-          <p className="text-center text-gray-600 mt-2">
-            Select a role to explore EduManager with realistic sample data
-          </p>
-        </DialogHeader>
-        <div className="p-6 pt-2">
-          <RoleSelector onRoleSelect={handleRoleSelect} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <div style={{ border: "2px solid red", padding: "10px" }}>
+      {" "}
+      {/* Temporary visual debug */}
+      <p>DEBUG: DemoLandingSection is rendering!</p>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger onClick={() => setIsOpen(true)}>
+          <Button variant="outline" size="lg">
+            Live Demo
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose Your Demo Experience</DialogTitle>
+            <p className="text-center text-gray-600 mt-2">
+              Select a role to explore EduManager with realistic sample data
+            </p>
+          </DialogHeader>
+          <div className="p-6 pt-2">
+            <RoleSelector onRoleSelect={handleRoleSelect} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
