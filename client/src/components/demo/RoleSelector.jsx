@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-// client/src/components/demo/RoleSelector.jsx - Fixed with Card Click Handler
+// client/src/components/demo/RoleSelector.jsx - Fixed with Default Export
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
@@ -8,12 +8,12 @@ import { Badge } from "../ui/badge";
 import { Shield, User, Book, Users } from "lucide-react";
 import { useDemo } from "../../contexts/DemoContext";
 
-export const RoleSelector = ({ onRoleSelect }) => {
+const RoleSelector = ({ onRoleSelect }) => {
   const { enterDemoMode, availableRoles } = useDemo();
 
   const roleConfig = {
     admin: {
-      icon: Shield, // Alternative: Settings, Crown, Key
+      icon: Shield,
       title: "School Administrator",
       description:
         "Manage the entire school system with comprehensive analytics and controls",
@@ -26,7 +26,7 @@ export const RoleSelector = ({ onRoleSelect }) => {
       color: "bg-purple-500",
     },
     teacher: {
-      icon: User, // Alternative: BookOpen, Presentation, Monitor
+      icon: User,
       title: "Teacher",
       description:
         "Manage classes, create assignments, and track student progress",
@@ -39,7 +39,7 @@ export const RoleSelector = ({ onRoleSelect }) => {
       color: "bg-green-500",
     },
     student: {
-      icon: Book, // Alternative: BookOpen, Backpack, PenTool
+      icon: Book,
       title: "Student",
       description:
         "View assignments, check grades, and track academic progress",
@@ -52,7 +52,7 @@ export const RoleSelector = ({ onRoleSelect }) => {
       color: "bg-blue-500",
     },
     parent: {
-      icon: Users, // Alternative: Heart, Eye, Home
+      icon: Users,
       title: "Parent",
       description:
         "Monitor your children's academic progress and school activities",
@@ -126,3 +126,5 @@ export const RoleSelector = ({ onRoleSelect }) => {
     </div>
   );
 };
+
+export default RoleSelector;
