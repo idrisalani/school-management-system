@@ -58,7 +58,9 @@ const Terms = lazy(() => import("../features/public/Terms.jsx"));
 const Contact = lazy(() => import("../features/public/Contact.jsx"));
 
 // Demo components - Lazy loaded
-const RoleSelector = lazy(() => import("../components/demo/RoleSelector.jsx"));
+const PageRoleSelector = lazy(
+  () => import("../components/demo/PageRoleSelector.jsx")
+);
 const DemoWrapper = lazy(() => import("../components/demo/DemoWrapper.jsx"));
 
 // Enhanced Loading Component
@@ -274,7 +276,7 @@ const AppRoutes = () => {
                     realistic demo data
                   </p>
                 </div>
-                <RoleSelector />
+                <PageRoleSelector />
               </div>
             </div>
           </SuspenseWrapper>

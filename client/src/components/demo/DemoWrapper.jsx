@@ -5,12 +5,14 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
+import ModalRoleSelector from "./ModalRoleSelector";
 
 const DemoWrapper = () => {
   const { role } = useParams();
   const [notifications, setNotifications] = useState([]);
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState({ stats: [] });
   const [isLoading, setIsLoading] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
 
   useEffect(() => {
     if (role) {
@@ -51,7 +53,7 @@ const DemoWrapper = () => {
           ),
         }));
         showNotification(
-          `Assignment "${actionData.title}" created successfully!`
+          `Assignment "${actionData.assignmentTitle || "New Assignment"}" created successfully!`
         );
         break;
 
@@ -110,10 +112,25 @@ const DemoWrapper = () => {
         break;
 
       default:
-        showNotification(`${actionData.action} completed successfully!`);
+        showNotification(
+          `${actionData.action || "Action"} completed successfully!`
+        );
     }
 
     setIsLoading(false);
+  };
+
+  // Handle role switching from modal
+  const handleRoleSwitch = (newRole) => {
+    // Clear demo state and navigate to new role
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("demo_mode");
+      sessionStorage.removeItem("demo_role");
+      sessionStorage.removeItem("demo_user");
+    }
+
+    // Navigate to new role demo
+    window.location.href = `/demo/${newRole}`;
   };
 
   // Basic validation
@@ -150,13 +167,21 @@ const DemoWrapper = () => {
             </div>
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => (window.location.href = "/demo")}
+                onClick={() => setShowRoleModal(true)}
                 className="text-blue-100 hover:text-white text-sm underline underline-offset-2 transition-colors"
               >
                 Switch Role
               </button>
               <button
-                onClick={() => (window.location.href = "/")}
+                onClick={() => {
+                  // Clear demo state and go home
+                  if (typeof window !== "undefined") {
+                    sessionStorage.removeItem("demo_mode");
+                    sessionStorage.removeItem("demo_role");
+                    sessionStorage.removeItem("demo_user");
+                  }
+                  window.location.href = "/";
+                }}
                 className="bg-white text-blue-600 px-4 py-1.5 rounded-full text-sm font-medium hover:bg-blue-50 transition-colors"
               >
                 Exit Demo
@@ -299,6 +324,13 @@ const DemoWrapper = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal Role Selector */}
+      <ModalRoleSelector
+        isOpen={showRoleModal}
+        onClose={() => setShowRoleModal(false)}
+        onRoleSelect={handleRoleSwitch}
+      />
 
       {/* Loading Overlay */}
       {isLoading && (
