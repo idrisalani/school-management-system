@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-// client/src/components/demo/RoleSelector.jsx - Alternative Icons Version
+// client/src/components/demo/RoleSelector.jsx - Fixed with Card Click Handler
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
@@ -84,6 +84,7 @@ export const RoleSelector = ({ onRoleSelect }) => {
           <Card
             key={role}
             className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => handleRoleSelect(role)}
           >
             <CardHeader className="pb-4">
               <div className="flex items-center space-x-3">

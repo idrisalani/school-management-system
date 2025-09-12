@@ -13,8 +13,17 @@ import {
   BarChart3, // Changed from ChartBar
 } from "lucide-react";
 import { DemoLandingSection } from "../../components/demo/DemoLandingSection";
+import { useDemo } from "../../contexts/DemoContext";
+
+// Add after your imports
+console.log("DemoLandingSection imported:", DemoLandingSection);
 
 const LandingPage = () => {
+  const demoContext = useDemo();
+
+  console.log("Demo context:", demoContext);
+  console.log("Available roles:", demoContext?.availableRoles);
+
   const features = [
     {
       icon: <Users className="w-6 h-6" />,
@@ -103,7 +112,6 @@ const LandingPage = () => {
               </Link>
             </div>
             <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-              {/* Replace the old demo link with DemoLandingSection */}
               <div className="w-full flex items-center justify-center">
                 <DemoLandingSection />
               </div>
@@ -148,7 +156,6 @@ const LandingPage = () => {
               >
                 Get Started Today
               </Link>
-              {/* Add another demo option in CTA section */}
               <div className="demo-cta-section">
                 <DemoLandingSection />
               </div>
