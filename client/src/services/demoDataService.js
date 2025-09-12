@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 // client/src/services/demoDataService.js
-import { demoData } from "../data/demoData";
+import { demoData } from "../data/demoData.js";
 
 // Simulate API delay for realistic feel
 const simulateDelay = (ms = 500) =>
