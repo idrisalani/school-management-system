@@ -103,7 +103,7 @@ const ModalRoleSelector = ({ isOpen, onClose, onRoleSelect }) => {
               return (
                 <div
                   key={role}
-                  className="group bg-white border-2 border-gray-100 rounded-xl p-4 hover:border-gray-200 hover:shadow-lg transition-all duration-200 cursor-pointer"
+                  className="group bg-white border-2 border-gray-100 rounded-xl p-4 hover:border-gray-200 hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col h-full"
                   onClick={() => handleRoleSelect(role)}
                 >
                   {/* Role Header */}
@@ -121,17 +121,17 @@ const ModalRoleSelector = ({ isOpen, onClose, onRoleSelect }) => {
                   </div>
 
                   {/* Description */}
-                  <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                  <p className="text-sm text-gray-600 mb-4 leading-relaxed flex-grow">
                     {config.description}
                   </p>
 
-                  {/* Action Button */}
+                  {/* Action Button - Fixed at bottom */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRoleSelect(role);
                     }}
-                    className={`w-full py-2.5 px-4 rounded-lg text-white font-medium text-sm transition-all duration-200 ${config.color} ${config.hoverColor} shadow-md hover:shadow-lg transform group-hover:scale-105`}
+                    className={`w-full py-2.5 px-4 rounded-lg text-white font-medium text-sm transition-all duration-200 ${config.color} ${config.hoverColor} shadow-md hover:shadow-lg transform group-hover:scale-105 mt-auto`}
                   >
                     Switch to {config.title}
                   </button>
