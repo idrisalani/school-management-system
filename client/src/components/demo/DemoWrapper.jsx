@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // client/src/components/demo/DemoWrapper.jsx
 // Enhanced version with beautiful UX and interactive features
 
@@ -438,7 +440,7 @@ function getQuickActions(role) {
           icon: "📝",
           color: "bg-blue-50 hover:bg-blue-100 text-blue-700",
           type: "create_assignment",
-          title: "React Fundamentals Quiz",
+          assignmentTitle: "React Fundamentals Quiz",
         },
         {
           title: "Grade Assignment",
